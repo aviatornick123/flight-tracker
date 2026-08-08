@@ -69,7 +69,13 @@ h1 {
 .card-top {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+}
+
+.callsign-header {
+  display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .callsign {
@@ -78,10 +84,27 @@ h1 {
   color: #f8fafc;
 }
 
+.airline-logo {
+  height: 22px;
+  max-width: 60px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
 .ac-type {
   font-size: 0.9rem;
   color: #38bdf8;
   font-weight: 600;
+  margin-top: 2px;
+}
+
+.route-badge {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #f59e0b;
+  margin-top: 4px;
 }
 
 .plane-img {
