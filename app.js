@@ -10,18 +10,20 @@ let trailPolylines = {};
 const ICAO_TO_IATA = {
   BAW: "BA", ACA: "AC", EIN: "EI", EZY: "U2", EJU: "EC",
   RYR: "FR", VIR: "VS", DLH: "LH", AAL: "AA", DAL: "DL",
-  UAE: "EK", QTR: "QR", SWR: "LX", KLM: "KL", AFR: "AF", RUK: "RK", TOM: "BY"
+  UAE: "EK", QTR: "QR", SWR: "LX", KLM: "KL", AFR: "AF", RUK: "RK", TOM: "BY", AIC: "AI"
 };
 
 const TYPE_NAMES = {
   B738: "Boeing 737-800",
   B739: "Boeing 737-900",
+  B772: "Boeing 777-200",
   B789: "Boeing 787-9 Dreamliner",
   A320: "Airbus A320",
   A20N: "Airbus A320neo",
   A321: "Airbus A321",
   A359: "Airbus A350-900",
   A388: "Airbus A380-800",
+  PC12: "Pilatus PC-12",
   P28A: "Piper PA-28 Cherokee",
   DA42: "Diamond DA42 Twin Star",
   C172: "Cessna 172 Skyhawk"
@@ -49,9 +51,9 @@ function getHeadingDirection(track) {
 }
 
 function getAltitudeColor(altFeet) {
-  if (altFeet < 5000) return "#f59e0b";  // Gold (Low)
-  if (altFeet < 18000) return "#38bdf8"; // Sky Blue (Mid)
-  return "#c084fc";                      // Purple (High)
+  if (altFeet < 5000) return "#f59e0b";  // Gold (Low / Approach)
+  if (altFeet < 18000) return "#38bdf8"; // Sky Blue (Mid Altitude)
+  return "#c084fc";                      // Purple (High Altitude / Cruise)
 }
 
 function getLogoUrl(callsign) {
@@ -96,8 +98,33 @@ async function getAircraftPhoto(registration) {
 
 async function getRoute(callsign, hex) {
   if (!callsign || callsign === "PRIVATE") return "Route N/A";
-  const clean = callsign.trim();
+  const clean = callsign.trim().toUpperCase();
   
+  // Method 1: HexDB by Callsign
+  try {
+    const res = await fetch(`https://hexdb.io/api/v1/route/icao/${clean}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.origin && data.destination) {
+        return `${data.origin} ✈️ ${data.destination}`;
+      }
+    }
+  } catch (e) {}
+
+  // Method 2: HexDB by Hex Code
+  if (hex) {
+    try {
+      const res = await fetch(`https://hexdb.io/api/v1/route/hex/${hex.toLowerCase()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.origin && data.destination) {
+          return `${data.origin} ✈️ ${data.destination}`;
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Method 3: ADSB.lol
   try {
     const res = await fetch(`https://api.adsb.lol/v2/callsign/${clean}`);
     if (res.ok) {
@@ -109,18 +136,6 @@ async function getRoute(callsign, hex) {
       }
     }
   } catch (e) {}
-
-  if (hex) {
-    try {
-      const res2 = await fetch(`https://hexdb.io/api/v1/route/icao/${hex.toLowerCase()}`);
-      if (res2.ok) {
-        const data2 = await res2.json();
-        if (data2 && data2.origin && data2.destination) {
-          return `${data2.origin} ✈️ ${data2.destination}`;
-        }
-      }
-    } catch (e) {}
-  }
 
   return "Route N/A";
 }
@@ -152,6 +167,23 @@ function unhighlightMarker(callsign) {
   }
 }
 
+function addLegend() {
+  const legend = L.control({ position: 'bottomright' });
+
+  legend.onAdd = function () {
+    const div = L.DomUtil.create('div', 'map-legend');
+    div.innerHTML = `
+      <div class="legend-title">Altitude</div>
+      <div class="legend-item"><span class="legend-color" style="background: #f59e0b;"></span> &lt; 5,000 ft</div>
+      <div class="legend-item"><span class="legend-color" style="background: #38bdf8;"></span> 5,000 - 18,000 ft</div>
+      <div class="legend-item"><span class="legend-color" style="background: #c084fc;"></span> &gt; 18,000 ft</div>
+    `;
+    return div;
+  };
+
+  legend.addTo(map);
+}
+
 function initMap() {
   if (map) return;
   map = L.map('map').setView([HOME_LAT, HOME_LON], 10);
@@ -167,6 +199,8 @@ function initMap() {
     fillOpacity: 0.8,
     radius: 8
   }).addTo(map).bindPopup("<b>Home Radar (Wokingham)</b>");
+
+  addLegend();
 }
 
 function updateClock() {
@@ -228,7 +262,7 @@ async function fetchFlights() {
         } else {
           const marker = L.marker([f.lat, f.lon], {
             icon: createRotatedPlaneIcon(f.track, f.altFeet)
-          }).addTo(map).bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet} ft`);
+          }).addTo(map).bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet.toLocaleString()} ft`);
 
           marker.on('mouseover', () => highlightCard(f.callsign));
           marker.on('mouseout', () => unhighlightCard(f.callsign));
@@ -270,7 +304,7 @@ async function fetchFlights() {
       }
     });
 
-    // Build Telemetry Cards with Hover Listeners
+    // Build Telemetry Cards with Color Accents & Hover Listeners
     const cardsHtml = await Promise.all(sortedFlights.map(async f => {
       const [photoUrl, route] = await Promise.all([
         getAircraftPhoto(f.reg),
@@ -278,6 +312,7 @@ async function fetchFlights() {
       ]);
 
       const logoUrl = getLogoUrl(f.callsign);
+      const altColor = getAltitudeColor(f.altFeet);
       
       let altTrend = "";
       if (f.vertRate > 250) altTrend = " ⬆️";
@@ -289,6 +324,7 @@ async function fetchFlights() {
 
       return `
         <div class="flight-card" id="card-${f.callsign}" 
+             style="border-left: 6px solid ${altColor};" 
              onmouseover="highlightMarker('${f.callsign}')" 
              onmouseout="unhighlightMarker('${f.callsign}')">
           <div class="card-top">
@@ -309,7 +345,7 @@ async function fetchFlights() {
             </div>
             <div>
               <div class="metric-label">Altitude</div>
-              <div class="metric-value">${f.altFeet.toLocaleString()} ft${altTrend}</div>
+              <div class="metric-value" style="color: ${altColor};">${f.altFeet.toLocaleString()} ft${altTrend}</div>
             </div>
             <div>
               <div class="metric-label">Speed</div>
