@@ -58,34 +58,27 @@ h1 {
   border: 1px solid var(--border-color);
 }
 
-/* --- Dashboard Main Grid Layout --- */
+/* --- Dashboard Vertical Stack Container --- */
 .dashboard-container {
-  display: grid;
-  grid-template-columns: 480px 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 20px;
   padding: 20px;
-  max-width: 1800px;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
   flex: 1;
 }
 
-@media (max-width: 1024px) {
-  .dashboard-container {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* --- Map Panel (Pinned & Expanded Column) --- */
+/* --- Shorter & Wider Widescreen Map --- */
 .map-panel {
-  position: sticky;
-  top: 80px;
-  height: calc(100vh - 120px);
-  min-height: 480px;
+  width: 100%;
+  height: 320px; /* Reduced height, stretched wide */
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid var(--border-color);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  position: relative;
 }
 
 #map {
@@ -104,17 +97,15 @@ h1 {
   background: var(--bg-card) !important;
 }
 
-/* --- Flight Feed Section --- */
+/* --- Flight Grid Section --- */
 .flight-feed {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  width: 100%;
 }
 
 #flight-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+  gap: 20px;
 }
 
 .loading-state {
@@ -125,7 +116,137 @@ h1 {
   grid-column: 1 / -1;
 }
 
-/* --- Standard Flight Cards --- */
+/* --- ⚡ FEATURED CARD (LARGEST TILE SPANNING FULL GRID) --- */
+.featured-card {
+  grid-column: 1 / -1; /* Spans full grid width */
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(30, 41, 59, 0.95));
+  border: 2px solid var(--accent-color, var(--accent-cyan));
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 24px rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.featured-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+}
+
+.featured-badge {
+  background: var(--accent-color, var(--accent-cyan));
+  color: #000000;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.featured-card .callsign {
+  font-size: 1.8rem;
+}
+
+.featured-card .airline-logo {
+  height: 32px;
+  max-width: 120px;
+}
+
+.featured-body {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 24px;
+  align-items: center;
+}
+
+@media (max-width: 850px) {
+  .featured-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.photo-wrapper {
+  position: relative;
+  width: 100%;
+  height: 200px;
+}
+
+.photo-wrapper .plane-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.ac-type-tag {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.featured-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.featured-details .route-panel {
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.featured-details .airport-code {
+  font-size: 1.8rem;
+}
+
+.featured-details .airport-name {
+  font-size: 0.9rem;
+  max-width: 240px;
+}
+
+.featured-details .airport-city {
+  font-size: 0.85rem;
+}
+
+.featured-details .route-arrow {
+  font-size: 1.5rem;
+}
+
+.featured-details .telemetry {
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+}
+
+.featured-details .metric-label {
+  font-size: 0.75rem;
+}
+
+.featured-details .metric-value {
+  font-size: 1.3rem;
+}
+
+/* --- Standard Flight Cards Grid Below --- */
 .flight-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -181,7 +302,6 @@ h1 {
   color: var(--text-muted);
 }
 
-/* Route display */
 .route-panel {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -225,7 +345,6 @@ h1 {
   padding: 0 8px;
 }
 
-/* Telemetry Grid */
 .telemetry {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -248,131 +367,4 @@ h1 {
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--text-primary);
-}
-
-/* --- ⚡ FEATURED CARD (CLOSEST IN RANGE - HIGH IMPACT LAYOUT) --- */
-.featured-card {
-  grid-column: 1 / -1;
-  background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(30, 41, 59, 0.95));
-  border: 2px solid var(--accent-color, var(--accent-cyan));
-  border-radius: 16px;
-  padding: 16px 20px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.featured-header-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 10px;
-}
-
-.featured-badge {
-  background: var(--accent-color, var(--accent-cyan));
-  color: #000000;
-  font-size: 0.75rem;
-  font-weight: 900;
-  letter-spacing: 1px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  text-transform: uppercase;
-}
-
-.featured-card .callsign {
-  font-size: 1.6rem;
-}
-
-.featured-card .airline-logo {
-  height: 28px;
-  max-width: 110px;
-}
-
-.featured-body {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 16px;
-  align-items: stretch;
-}
-
-@media (max-width: 640px) {
-  .featured-body {
-    grid-template-columns: 1fr;
-  }
-}
-
-.photo-wrapper {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 160px;
-}
-
-.photo-wrapper .plane-photo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-}
-
-.ac-type-tag {
-  position: absolute;
-  bottom: 8px;
-  left: 8px;
-  right: 8px;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-  color: #ffffff;
-  font-size: 0.75rem;
-  padding: 4px 8px;
-  border-radius: 6px;
-  text-align: center;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.featured-details {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.featured-details .route-panel {
-  padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.35);
-}
-
-.featured-details .airport-code {
-  font-size: 1.5rem;
-}
-
-.featured-details .airport-name {
-  font-size: 0.85rem;
-  max-width: 200px;
-}
-
-.featured-details .airport-city {
-  font-size: 0.8rem;
-}
-
-.featured-details .route-arrow {
-  font-size: 1.2rem;
-}
-
-.featured-details .telemetry {
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.35);
-}
-
-.featured-details .metric-label {
-  font-size: 0.75rem;
-}
-
-.featured-details .metric-value {
-  font-size: 1.15rem;
 }
