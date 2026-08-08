@@ -4,8 +4,8 @@ const RADIUS_NM = 15;
 
 let map, homeMarker;
 let aircraftMarkers = {};
-let flightTrails = {};      // Stores coordinate history per aircraft
-let trailPolylines = {};    // Stores Leaflet polyline objects
+let flightTrails = {};
+let trailPolylines = {};
 
 const ICAO_TO_IATA = {
   BAW: "BA", ACA: "AC", EIN: "EI", EZY: "U2", EJU: "EC",
@@ -49,9 +49,9 @@ function getHeadingDirection(track) {
 }
 
 function getAltitudeColor(altFeet) {
-  if (altFeet < 5000) return "#f59e0b";  // Gold (Low Altitude / Approach)
-  if (altFeet < 18000) return "#38bdf8"; // Sky Blue (Mid Altitude)
-  return "#c084fc";                      // Purple (High Altitude / Cruise)
+  if (altFeet < 5000) return "#f59e0b";  // Gold (Low)
+  if (altFeet < 18000) return "#38bdf8"; // Sky Blue (Mid)
+  return "#c084fc";                      // Purple (High)
 }
 
 function getLogoUrl(callsign) {
@@ -125,6 +125,33 @@ async function getRoute(callsign, hex) {
   return "Route N/A";
 }
 
+function highlightCard(callsign) {
+  const card = document.getElementById(`card-${callsign}`);
+  if (card) {
+    card.classList.add('highlighted');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function unhighlightCard(callsign) {
+  const card = document.getElementById(`card-${callsign}`);
+  if (card) {
+    card.classList.remove('highlighted');
+  }
+}
+
+function highlightMarker(callsign) {
+  if (aircraftMarkers[callsign]) {
+    aircraftMarkers[callsign].openPopup();
+  }
+}
+
+function unhighlightMarker(callsign) {
+  if (aircraftMarkers[callsign]) {
+    aircraftMarkers[callsign].closePopup();
+  }
+}
+
 function initMap() {
   if (map) return;
   map = L.map('map').setView([HOME_LAT, HOME_LON], 10);
@@ -188,23 +215,28 @@ async function fetchFlights() {
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 4);
 
-    // Update Map Markers & Breadcrumb Trails
+    // Update Map Markers & Trails
     sortedFlights.forEach(f => {
       if (f.lat && f.lon) {
         activeCallsigns.add(f.callsign);
         const altColor = getAltitudeColor(f.altFeet);
 
-        // 1. Marker with Rotated & Color-coded Icon
+        // Marker Creation & Listener Setup
         if (aircraftMarkers[f.callsign]) {
           aircraftMarkers[f.callsign].setLatLng([f.lat, f.lon]);
           aircraftMarkers[f.callsign].setIcon(createRotatedPlaneIcon(f.track, f.altFeet));
         } else {
-          aircraftMarkers[f.callsign] = L.marker([f.lat, f.lon], {
+          const marker = L.marker([f.lat, f.lon], {
             icon: createRotatedPlaneIcon(f.track, f.altFeet)
           }).addTo(map).bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet} ft`);
+
+          marker.on('mouseover', () => highlightCard(f.callsign));
+          marker.on('mouseout', () => unhighlightCard(f.callsign));
+
+          aircraftMarkers[f.callsign] = marker;
         }
 
-        // 2. Flight Trail Polyline (Matching Altitude Color)
+        // Trail Polyline
         if (!flightTrails[f.callsign]) {
           flightTrails[f.callsign] = [];
         }
@@ -225,7 +257,7 @@ async function fetchFlights() {
       }
     });
 
-    // Clean up stale markers/trails for aircraft out of range
+    // Cleanup stale markers/trails
     Object.keys(aircraftMarkers).forEach(cs => {
       if (!activeCallsigns.has(cs)) {
         map.removeLayer(aircraftMarkers[cs]);
@@ -238,7 +270,7 @@ async function fetchFlights() {
       }
     });
 
-    // Build Telemetry Cards
+    // Build Telemetry Cards with Hover Listeners
     const cardsHtml = await Promise.all(sortedFlights.map(async f => {
       const [photoUrl, route] = await Promise.all([
         getAircraftPhoto(f.reg),
@@ -256,7 +288,9 @@ async function fetchFlights() {
         : `<div class="plane-img" style="display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.75rem;">No Photo</div>`;
 
       return `
-        <div class="flight-card">
+        <div class="flight-card" id="card-${f.callsign}" 
+             onmouseover="highlightMarker('${f.callsign}')" 
+             onmouseout="unhighlightMarker('${f.callsign}')">
           <div class="card-top">
             <div>
               <div class="callsign-header">
