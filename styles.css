@@ -7,7 +7,7 @@
 body {
   background-color: #0b0f17;
   color: #f8fafc;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   padding: 20px;
 }
 
@@ -24,12 +24,12 @@ body {
   font-size: 1.5rem;
   letter-spacing: 1px;
   color: #38bdf8;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .clock {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 1.25rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 1.2rem;
   color: #94a3b8;
   background: #0f172a;
   padding: 4px 12px;
@@ -37,25 +37,28 @@ body {
   border: 1px solid #1e293b;
 }
 
+/* Two-column layout fixing full-width right-side stacking */
 .dashboard-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.2fr 0.8fr;
   gap: 20px;
+  align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .dashboard-container {
     grid-template-columns: 1fr;
   }
 }
 
 #map {
-  height: 650px;
+  height: calc(100vh - 100px);
   width: 100%;
   border-radius: 12px;
   border: 1px solid #1e293b;
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  position: sticky;
+  top: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 .flight-grid {
@@ -64,20 +67,42 @@ body {
   gap: 16px;
 }
 
+/* Standard Flight Card */
 .flight-card {
   background-color: #0f172a;
   border: 1px solid #1e293b;
   border-radius: 12px;
   padding: 16px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  transition: all 0.2s ease;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
-.flight-card:hover, .flight-card.highlighted {
+.flight-card:hover {
   transform: translateY(-2px);
   background-color: #152035;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Hero Card for Closest Flight */
+.flight-card.featured-card {
+  background: linear-gradient(135deg, #0f172a 0%, #172554 100%);
+  border: 2px solid #38bdf8;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.25);
+  padding: 20px;
+}
+
+.featured-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #38bdf8;
+  color: #0b0f17;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
 }
 
 .card-top {
@@ -85,7 +110,7 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .callsign-header {
@@ -94,46 +119,72 @@ body {
   gap: 10px;
 }
 
-.index-badge {
-  font-size: 0.8rem;
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.5px;
-  display: inline-block;
-}
-
 .callsign {
   font-size: 1.4rem;
   font-weight: 800;
   color: #ffffff;
-  letter-spacing: 0.5px;
+}
+
+.featured-card .callsign {
+  font-size: 1.7rem;
+  color: #38bdf8;
 }
 
 .airline-logo {
   height: 24px;
   max-width: 90px;
   object-fit: contain;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 }
 
 .ac-type {
   font-size: 0.85rem;
   color: #94a3b8;
-  margin-top: 4px;
-  font-weight: 500;
+  margin-top: 2px;
 }
 
-.route-badge {
-  display: inline-block;
-  font-size: 0.8rem;
+/* Enhanced Route & Airport Panel */
+.route-panel {
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+
+.route-airports {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.airport-node {
+  flex: 1;
+}
+
+.airport-code {
+  font-size: 1rem;
+  font-weight: 800;
   color: #fbbf24;
-  margin-top: 6px;
-  font-weight: 600;
-  background-color: rgba(251, 191, 36, 0.08);
-  padding: 3px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.airport-name {
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.airport-city {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.route-arrow {
+  color: #64748b;
+  font-size: 1.1rem;
 }
 
 .plane-img {
@@ -141,75 +192,34 @@ body {
   height: 72px;
   object-fit: cover;
   border-radius: 8px;
-  background-color: #1e293b;
   border: 1px solid #334155;
   flex-shrink: 0;
+}
+
+.featured-card .plane-img {
+  width: 130px;
+  height: 85px;
 }
 
 .telemetry {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 8px;
   background-color: #090d16;
-  padding: 12px;
+  padding: 10px;
   border-radius: 8px;
   text-align: center;
-  margin-top: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .metric-label {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-bottom: 3px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .metric-value {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: #f1f5f9;
-}
-
-.loading-state {
-  text-align: center;
-  padding: 50px 20px;
-  color: #64748b;
-  font-size: 1.1rem;
-  background: #0f172a;
-  border-radius: 12px;
-  border: 1px dashed #1e293b;
-}
-
-/* Custom Map Plane Marker & Label Tag */
-.plane-marker-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-}
-
-.plane-svg-icon {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  filter: drop-shadow(0px 3px 6px rgba(0,0,0,0.85));
-  transition: transform 0.3s ease;
-}
-
-.plane-marker-tag {
-  margin-top: 2px;
-  padding: 2px 7px;
-  border-radius: 12px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  white-space: nowrap;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.7);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  letter-spacing: 0.4px;
 }
