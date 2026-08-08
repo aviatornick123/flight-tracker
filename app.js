@@ -4,11 +4,13 @@ const RADIUS_NM = 15;
 
 let map, homeMarker;
 let aircraftMarkers = {};
+let flightTrails = {};      // Stores coordinate history per aircraft
+let trailPolylines = {};    // Stores Leaflet polyline objects
 
 const ICAO_TO_IATA = {
   BAW: "BA", ACA: "AC", EIN: "EI", EZY: "U2", EJU: "EC",
   RYR: "FR", VIR: "VS", DLH: "LH", AAL: "AA", DAL: "DL",
-  UAE: "EK", QTR: "QR", SWR: "LX", KLM: "KL", AFR: "AF", RUK: "RK"
+  UAE: "EK", QTR: "QR", SWR: "LX", KLM: "KL", AFR: "AF", RUK: "RK", TOM: "BY"
 };
 
 const TYPE_NAMES = {
@@ -16,6 +18,7 @@ const TYPE_NAMES = {
   B739: "Boeing 737-900",
   B789: "Boeing 787-9 Dreamliner",
   A320: "Airbus A320",
+  A20N: "Airbus A320neo",
   A321: "Airbus A321",
   A359: "Airbus A350-900",
   A388: "Airbus A380-800",
@@ -53,6 +56,22 @@ function getLogoUrl(callsign) {
   return `https://pics.avs.io/200/80/${iata}.png`;
 }
 
+function createRotatedPlaneIcon(heading) {
+  const angle = heading || 0;
+  const svg = `
+    <div style="transform: rotate(${angle}deg); width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.8));">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="#38bdf8" stroke="#0f172a" stroke-width="1.5">
+        <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+      </svg>
+    </div>`;
+  return L.divIcon({
+    html: svg,
+    className: 'plane-marker-icon',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  });
+}
+
 async function getAircraftPhoto(registration) {
   if (!registration) return null;
   try {
@@ -68,22 +87,35 @@ async function getAircraftPhoto(registration) {
   return null;
 }
 
-async function getRoute(callsign) {
+// Dual Route Lookup: Tries CallSign API first, falls back to Mode-S Hex DB
+async function getRoute(callsign, hex) {
   if (!callsign || callsign === "PRIVATE") return "Route N/A";
+  const clean = callsign.trim();
+  
   try {
-    const res = await fetch(`https://api.adsb.lol/v2/callsign/${callsign.trim()}`);
-    if (!res.ok) return "Route N/A";
-    const data = await res.json();
-    if (data && data.route) {
-      const origin = data.route.origin?.iata || data.route.origin?.icao || "";
-      const dest = data.route.destination?.iata || data.route.destination?.icao || "";
-      if (origin && dest) {
-        return `${origin} ✈️ ${dest}`;
+    const res = await fetch(`https://api.adsb.lol/v2/callsign/${clean}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.route) {
+        const orig = data.route._origin || data.route.origin?.iata || data.route.origin?.icao || "";
+        const dest = data.route._destination || data.route.destination?.iata || data.route.destination?.icao || "";
+        if (orig && dest) return `${orig} ✈️ ${dest}`;
       }
     }
-  } catch (e) {
-    console.error("Route error:", e);
+  } catch (e) {}
+
+  if (hex) {
+    try {
+      const res2 = await fetch(`https://hexdb.io/api/v1/route/icao/${hex.toLowerCase()}`);
+      if (res2.ok) {
+        const data2 = await res2.json();
+        if (data2 && data2.origin && data2.destination) {
+          return `${data2.origin} ✈️ ${data2.destination}`;
+        }
+      }
+    } catch (e) {}
   }
+
   return "Route N/A";
 }
 
@@ -101,7 +133,7 @@ function initMap() {
     fillColor: '#38bdf8',
     fillOpacity: 0.8,
     radius: 8
-  }).addTo(map).bindPopup("<b>Home Radar</b>");
+  }).addTo(map).bindPopup("<b>Home Radar (Wokingham)</b>");
 }
 
 function updateClock() {
@@ -127,44 +159,90 @@ async function fetchFlights() {
       return;
     }
 
+    const activeCallsigns = new Set();
+
     const sortedFlights = data.ac
       .map(ac => {
         const callsign = ac.flight ? ac.flight.trim() : "PRIVATE";
+        const hex = ac.hex || "";
         const reg = ac.r || "";
         const typeCode = ac.t || "Aircraft";
         const fullType = ac.desc || TYPE_NAMES[typeCode] || typeCode;
         const lat = ac.lat;
         const lon = ac.lon;
+        const track = ac.track || 0;
         const altFeet = typeof ac.alt_baro === "number" ? ac.alt_baro : (ac.alt_geom || 0);
         const speedKnots = Math.round(ac.gs || 0);
-        const heading = getHeadingDirection(ac.track);
+        const vertRate = ac.baro_rate || ac.geom_rate || 0; // Vertical climb/descent rate
+        const heading = getHeadingDirection(track);
         const distance = (lat && lon) ? parseFloat(getDistanceInMiles(HOME_LAT, HOME_LON, lat, lon)) : 999;
 
-        return { callsign, reg, typeCode, fullType, lat, lon, altFeet, speedKnots, heading, distance };
+        return { callsign, hex, reg, typeCode, fullType, lat, lon, track, altFeet, speedKnots, vertRate, heading, distance };
       })
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 4);
 
-    // Update Map Markers
-    Object.keys(aircraftMarkers).forEach(key => map.removeLayer(aircraftMarkers[key]));
-    aircraftMarkers = {};
-
+    // Update Map Markers & Breadcrumb Trails
     sortedFlights.forEach(f => {
       if (f.lat && f.lon) {
-        const marker = L.marker([f.lat, f.lon]).addTo(map)
-          .bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet} ft`);
-        aircraftMarkers[f.callsign] = marker;
+        activeCallsigns.add(f.callsign);
+
+        // 1. Marker with Rotated Icon
+        if (aircraftMarkers[f.callsign]) {
+          aircraftMarkers[f.callsign].setLatLng([f.lat, f.lon]);
+          aircraftMarkers[f.callsign].setIcon(createRotatedPlaneIcon(f.track));
+        } else {
+          aircraftMarkers[f.callsign] = L.marker([f.lat, f.lon], {
+            icon: createRotatedPlaneIcon(f.track)
+          }).addTo(map).bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet} ft`);
+        }
+
+        // 2. Flight Trail Polyline
+        if (!flightTrails[f.callsign]) {
+          flightTrails[f.callsign] = [];
+        }
+        flightTrails[f.callsign].push([f.lat, f.lon]);
+        if (flightTrails[f.callsign].length > 20) flightTrails[f.callsign].shift(); // Keep last 20 coordinates
+
+        if (trailPolylines[f.callsign]) {
+          trailPolylines[f.callsign].setLatLngs(flightTrails[f.callsign]);
+        } else {
+          trailPolylines[f.callsign] = L.polyline(flightTrails[f.callsign], {
+            color: '#38bdf8',
+            weight: 2.5,
+            opacity: 0.8,
+            dashArray: '5, 5'
+          }).addTo(map);
+        }
       }
     });
 
-    // Build Cards & Fetch External Info (Photos, Routes)
+    // Clean up stale markers/trails for aircraft that moved out of range
+    Object.keys(aircraftMarkers).forEach(cs => {
+      if (!activeCallsigns.has(cs)) {
+        map.removeLayer(aircraftMarkers[cs]);
+        delete aircraftMarkers[cs];
+        if (trailPolylines[cs]) {
+          map.removeLayer(trailPolylines[cs]);
+          delete trailPolylines[cs];
+        }
+        delete flightTrails[cs];
+      }
+    });
+
+    // Build Telemetry Cards
     const cardsHtml = await Promise.all(sortedFlights.map(async f => {
       const [photoUrl, route] = await Promise.all([
         getAircraftPhoto(f.reg),
-        getRoute(f.callsign)
+        getRoute(f.callsign, f.hex)
       ]);
 
       const logoUrl = getLogoUrl(f.callsign);
+      
+      // Altitude trend arrow
+      let altTrend = "";
+      if (f.vertRate > 250) altTrend = " ⬆️";
+      else if (f.vertRate < -250) altTrend = " ⬇️";
 
       const imgHtml = photoUrl 
         ? `<img class="plane-img" src="${photoUrl}" alt="${f.fullType}" />`
@@ -190,7 +268,7 @@ async function fetchFlights() {
             </div>
             <div>
               <div class="metric-label">Altitude</div>
-              <div class="metric-value">${f.altFeet.toLocaleString()} ft</div>
+              <div class="metric-value">${f.altFeet.toLocaleString()} ft${altTrend}</div>
             </div>
             <div>
               <div class="metric-label">Speed</div>
