@@ -7,6 +7,9 @@ let aircraftMarkers = {};
 let flightTrails = {};
 let trailPolylines = {};
 
+const routeCache = {};
+const photoCache = {};
+
 const ICAO_TO_IATA = {
   BAW: "BA", ACA: "AC", EIN: "EI", EZY: "U2", EJU: "EC",
   RYR: "FR", VIR: "VS", DLH: "LH", AAL: "AA", DAL: "DL",
@@ -83,60 +86,81 @@ function createRotatedPlaneIcon(heading, altFeet) {
 
 async function getAircraftPhoto(registration) {
   if (!registration) return null;
+  const regClean = registration.trim();
+  if (photoCache[regClean] !== undefined) return photoCache[regClean];
+
   try {
-    const res = await fetch(`https://api.planespotters.net/pub/photos/reg/${registration.trim()}`);
-    if (!res.ok) return null;
+    const res = await fetch(`https://api.planespotters.net/pub/photos/reg/${regClean}`);
+    if (!res.ok) {
+      photoCache[regClean] = null;
+      return null;
+    }
     const data = await res.json();
     if (data.photos && data.photos.length > 0) {
-      return data.photos[0].thumbnail_large.src;
+      const src = data.photos[0].thumbnail_large.src;
+      photoCache[regClean] = src;
+      return src;
     }
   } catch (e) {
     console.error("Photo error:", e);
   }
+  photoCache[regClean] = null;
   return null;
 }
 
 async function getRoute(callsign, hex) {
   if (!callsign || callsign === "PRIVATE") return "Route N/A";
   const clean = callsign.trim().toUpperCase();
-  
-  // Method 1: HexDB by Callsign
+
+  if (routeCache[clean]) return routeCache[clean];
+
+  const proxy = "https://corsproxy.io/?";
+
+  // Method 1: HexDB by Callsign via CORS Proxy
   try {
-    const res = await fetch(`https://hexdb.io/api/v1/route/icao/${clean}`);
+    const res = await fetch(`${proxy}${encodeURIComponent(`https://hexdb.io/api/v1/route/icao/${clean}`)}`);
     if (res.ok) {
       const data = await res.json();
       if (data && data.origin && data.destination) {
-        return `${data.origin} ✈️ ${data.destination}`;
+        const routeStr = `${data.origin} ✈️ ${data.destination}`;
+        routeCache[clean] = routeStr;
+        return routeStr;
       }
     }
   } catch (e) {}
 
-  // Method 2: HexDB by Hex Code
-  if (hex) {
-    try {
-      const res = await fetch(`https://hexdb.io/api/v1/route/hex/${hex.toLowerCase()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.origin && data.destination) {
-          return `${data.origin} ✈️ ${data.destination}`;
-        }
-      }
-    } catch (e) {}
-  }
-
-  // Method 3: ADSB.lol
+  // Method 2: ADSB.lol via CORS Proxy
   try {
-    const res = await fetch(`https://api.adsb.lol/v2/callsign/${clean}`);
+    const res = await fetch(`${proxy}${encodeURIComponent(`https://api.adsb.lol/v2/callsign/${clean}`)}`);
     if (res.ok) {
       const data = await res.json();
       if (data && data.route) {
         const orig = data.route._origin || data.route.origin?.iata || data.route.origin?.icao || "";
         const dest = data.route._destination || data.route.destination?.iata || data.route.destination?.icao || "";
-        if (orig && dest) return `${orig} ✈️ ${dest}`;
+        if (orig && dest) {
+          const routeStr = `${orig} ✈️ ${dest}`;
+          routeCache[clean] = routeStr;
+          return routeStr;
+        }
       }
     }
   } catch (e) {}
 
+  // Method 3: ADSBdb API
+  try {
+    const res = await fetch(`${proxy}${encodeURIComponent(`https://api.adsbdb.com/v0/callsign/${clean}`)}`);
+    if (res.ok) {
+      const data = await res.json();
+      const flight = data?.response?.flightroute;
+      if (flight && flight.origin?.iata_code && flight.destination?.iata_code) {
+        const routeStr = `${flight.origin.iata_code} ✈️ ${flight.destination.iata_code}`;
+        routeCache[clean] = routeStr;
+        return routeStr;
+      }
+    }
+  } catch (e) {}
+
+  routeCache[clean] = "Route N/A";
   return "Route N/A";
 }
 
@@ -304,7 +328,7 @@ async function fetchFlights() {
       }
     });
 
-    // Build Telemetry Cards with Color Accents & Hover Listeners
+    // Build Telemetry Cards
     const cardsHtml = await Promise.all(sortedFlights.map(async f => {
       const [photoUrl, route] = await Promise.all([
         getAircraftPhoto(f.reg),
