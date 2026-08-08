@@ -5,6 +5,25 @@ const RADIUS_NM = 15;
 let map, homeMarker;
 let aircraftMarkers = {};
 
+const ICAO_TO_IATA = {
+  BAW: "BA", ACA: "AC", EIN: "EI", EZY: "U2", EJU: "EC",
+  RYR: "FR", VIR: "VS", DLH: "LH", AAL: "AA", DAL: "DL",
+  UAE: "EK", QTR: "QR", SWR: "LX", KLM: "KL", AFR: "AF", RUK: "RK"
+};
+
+const TYPE_NAMES = {
+  B738: "Boeing 737-800",
+  B739: "Boeing 737-900",
+  B789: "Boeing 787-9 Dreamliner",
+  A320: "Airbus A320",
+  A321: "Airbus A321",
+  A359: "Airbus A350-900",
+  A388: "Airbus A380-800",
+  P28A: "Piper PA-28 Cherokee",
+  DA42: "Diamond DA42 Twin Star",
+  C172: "Cessna 172 Skyhawk"
+};
+
 function getDistanceInMiles(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -26,6 +45,14 @@ function getHeadingDirection(track) {
   return `${Math.round(track)}° ${dirs[index]}`;
 }
 
+function getLogoUrl(callsign) {
+  if (!callsign) return "";
+  const trimmed = callsign.trim();
+  const icao = trimmed.substring(0, 3).toUpperCase();
+  const iata = ICAO_TO_IATA[icao] || trimmed.substring(0, 2).toUpperCase();
+  return `https://pics.avs.io/200/80/${iata}.png`;
+}
+
 async function getAircraftPhoto(registration) {
   if (!registration) return null;
   try {
@@ -36,9 +63,28 @@ async function getAircraftPhoto(registration) {
       return data.photos[0].thumbnail_large.src;
     }
   } catch (e) {
-    console.error("Photo fetch error:", e);
+    console.error("Photo error:", e);
   }
   return null;
+}
+
+async function getRoute(callsign) {
+  if (!callsign || callsign === "PRIVATE") return "Route N/A";
+  try {
+    const res = await fetch(`https://api.adsb.lol/v2/callsign/${callsign.trim()}`);
+    if (!res.ok) return "Route N/A";
+    const data = await res.json();
+    if (data && data.route) {
+      const origin = data.route.origin?.iata || data.route.origin?.icao || "";
+      const dest = data.route.destination?.iata || data.route.destination?.icao || "";
+      if (origin && dest) {
+        return `${origin} ✈️ ${dest}`;
+      }
+    }
+  } catch (e) {
+    console.error("Route error:", e);
+  }
+  return "Route N/A";
 }
 
 function initMap() {
@@ -85,7 +131,8 @@ async function fetchFlights() {
       .map(ac => {
         const callsign = ac.flight ? ac.flight.trim() : "PRIVATE";
         const reg = ac.r || "";
-        const type = ac.t || "Aircraft";
+        const typeCode = ac.t || "Aircraft";
+        const fullType = ac.desc || TYPE_NAMES[typeCode] || typeCode;
         const lat = ac.lat;
         const lon = ac.lon;
         const altFeet = typeof ac.alt_baro === "number" ? ac.alt_baro : (ac.alt_geom || 0);
@@ -93,7 +140,7 @@ async function fetchFlights() {
         const heading = getHeadingDirection(ac.track);
         const distance = (lat && lon) ? parseFloat(getDistanceInMiles(HOME_LAT, HOME_LON, lat, lon)) : 999;
 
-        return { callsign, reg, type, lat, lon, altFeet, speedKnots, heading, distance };
+        return { callsign, reg, typeCode, fullType, lat, lon, altFeet, speedKnots, heading, distance };
       })
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 4);
@@ -105,24 +152,34 @@ async function fetchFlights() {
     sortedFlights.forEach(f => {
       if (f.lat && f.lon) {
         const marker = L.marker([f.lat, f.lon]).addTo(map)
-          .bindPopup(`<b>${f.callsign}</b><br>${f.type}<br>Alt: ${f.altFeet} ft`);
+          .bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet} ft`);
         aircraftMarkers[f.callsign] = marker;
       }
     });
 
-    // Build Cards & Fetch Photos
+    // Build Cards & Fetch External Info (Photos, Routes)
     const cardsHtml = await Promise.all(sortedFlights.map(async f => {
-      const photoUrl = await getAircraftPhoto(f.reg);
+      const [photoUrl, route] = await Promise.all([
+        getAircraftPhoto(f.reg),
+        getRoute(f.callsign)
+      ]);
+
+      const logoUrl = getLogoUrl(f.callsign);
+
       const imgHtml = photoUrl 
-        ? `<img class="plane-img" src="${photoUrl}" alt="${f.type}" />`
+        ? `<img class="plane-img" src="${photoUrl}" alt="${f.fullType}" />`
         : `<div class="plane-img" style="display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.75rem;">No Photo</div>`;
 
       return `
         <div class="flight-card">
           <div class="card-top">
             <div>
-              <div class="callsign">${f.callsign}</div>
-              <div class="ac-type">${f.type} ${f.reg ? `(${f.reg})` : ''}</div>
+              <div class="callsign-header">
+                <span class="callsign">${f.callsign}</span>
+                <img class="airline-logo" src="${logoUrl}" onerror="this.style.display='none'" />
+              </div>
+              <div class="ac-type">${f.fullType} ${f.reg ? `(${f.reg})` : ''}</div>
+              <div class="route-badge">${route}</div>
             </div>
             ${imgHtml}
           </div>
