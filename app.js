@@ -19,28 +19,6 @@ let aircraftMarkers = {};
 let aircraftTrails = {};
 let aircraftHistory = {};
 
-// Airport database with GPS coordinates for accurate Time-To-Destination calculations
-const AIRPORT_DB = {
-  LHR: { city: "London", name: "Heathrow Airport", lat: 51.4700, lon: -0.4543 },
-  LGW: { city: "London", name: "Gatwick Airport", lat: 51.1537, lon: -0.1821 },
-  STN: { city: "London", name: "Stansted Airport", lat: 51.8860, lon: 0.2389 },
-  LTN: { city: "London", name: "Luton Airport", lat: 51.8747, lon: -0.3683 },
-  MAN: { city: "Manchester", name: "Manchester Airport", lat: 53.3537, lon: -2.2750 },
-  EDI: { city: "Edinburgh", name: "Edinburgh Airport", lat: 55.9500, lon: -3.3725 },
-  DUB: { city: "Dublin", name: "Dublin Airport", lat: 53.4264, lon: -6.2499 },
-  GRU: { city: "São Paulo", name: "Guarulhos Int'l", lat: -23.4356, lon: -46.4731 },
-  BOM: { city: "Mumbai", name: "Chhatrapati Shivaji Int'l", lat: 19.0896, lon: 72.8656 },
-  ICN: { city: "Seoul", name: "Incheon Int'l", lat: 37.4602, lon: 126.4407 },
-  KUL: { city: "Kuala Lumpur", name: "Kuala Lumpur Int'l", lat: 2.7456, lon: 101.7099 },
-  JFK: { city: "New York", name: "John F. Kennedy Int'l", lat: 40.6413, lon: -73.7781 },
-  LAX: { city: "Los Angeles", name: "Los Angeles Int'l", lat: 33.9416, lon: -118.4085 },
-  DXB: { city: "Dubai", name: "Dubai Int'l", lat: 25.2532, lon: 55.3657 },
-  CDG: { city: "Paris", name: "Charles de Gaulle", lat: 49.0097, lon: 2.5479 },
-  AMS: { city: "Amsterdam", name: "Schiphol Airport", lat: 52.3105, lon: 4.7683 },
-  MAD: { city: "Madrid", name: "Barajas Airport", lat: 40.4839, lon: -3.5680 },
-  BCN: { city: "Barcelona", name: "El Prat Airport", lat: 41.2974, lon: 2.0785 }
-};
-
 // ICAO prefix to IATA code map for reliable logo rendering
 const ICAO_TO_IATA = {
   BAW: "BA", RYR: "FR", EZY: "U2", VIR: "VS", SWR: "LX",
@@ -63,45 +41,42 @@ function getDistanceInMiles(lat1, lon1, lat2, lon2) {
   return (R * c).toFixed(1);
 }
 
+// Dynamically extracts full route, city, and airport name from global aviation database
 async function getRoute(callsign) {
-  if (!callsign || callsign === "PRIVATE") return { origin: "N/A", dest: "N/A", destLat: null, destLon: null };
+  if (!callsign || callsign === "PRIVATE") return null;
   try {
     const res = await fetch(`https://api.adsbdb.com/v0/callsign/${callsign.trim()}`);
     if (res.ok) {
       const data = await res.json();
       const flightRoute = data?.response?.flightroute;
-      if (flightRoute?.origin?.iata_code && flightRoute?.destination?.iata_code) {
+      if (flightRoute?.origin && flightRoute?.destination) {
         return {
-          origin: flightRoute.origin.iata_code,
-          dest: flightRoute.destination.iata_code,
-          destLat: flightRoute.destination.latitude || null,
-          destLon: flightRoute.destination.longitude || null
+          origin: {
+            code: flightRoute.origin.iata_code || flightRoute.origin.icao_code || "N/A",
+            name: flightRoute.origin.name || "Unknown Airport",
+            city: flightRoute.origin.municipality || flightRoute.origin.country_name || "Unknown City",
+            lat: flightRoute.origin.latitude || null,
+            lon: flightRoute.origin.longitude || null
+          },
+          dest: {
+            code: flightRoute.destination.iata_code || flightRoute.destination.icao_code || "N/A",
+            name: flightRoute.destination.name || "Unknown Airport",
+            city: flightRoute.destination.municipality || flightRoute.destination.country_name || "Unknown City",
+            lat: flightRoute.destination.latitude || null,
+            lon: flightRoute.destination.longitude || null
+          }
         };
       }
     }
   } catch (e) {}
-  return { origin: "N/A", dest: "N/A", destLat: null, destLon: null };
+  return null;
 }
 
-function getAirportInfo(code) {
-  if (!code || code === "N/A" || code === "???") {
-    return { code: "N/A", city: "Unknown", name: "Airport Info N/A", lat: null, lon: null };
-  }
-  const clean = code.trim().toUpperCase();
-  const info = AIRPORT_DB[clean] || { city: clean, name: `${clean} Airport`, lat: null, lon: null };
-  return { code: clean, ...info };
-}
-
-// Calculate actual remaining time to destination airport
+// Calculate actual remaining time to destination airport coordinates
 function calculateTimeToDest(planeLat, planeLon, destObj, speedKnots) {
-  if (!speedKnots || speedKnots < 50) return "N/A";
-  
-  let targetLat = destObj.destLat || destObj.lat;
-  let targetLon = destObj.destLon || destObj.lon;
-  
-  if (!targetLat || !targetLon) return "N/A";
+  if (!speedKnots || speedKnots < 50 || !destObj || !destObj.lat || !destObj.lon) return "N/A";
 
-  const distToDestMiles = parseFloat(getDistanceInMiles(planeLat, planeLon, targetLat, targetLon));
+  const distToDestMiles = parseFloat(getDistanceInMiles(planeLat, planeLon, destObj.lat, destObj.lon));
   const speedMph = speedKnots * 1.15078;
   const hours = distToDestMiles / speedMph;
   const minutes = Math.round(hours * 60);
@@ -243,7 +218,7 @@ async function fetchFlights() {
   try {
     const res = await fetch(`https://api.airplanes.live/v2/point/${HOME_LAT}/${HOME_LON}/${RADIUS_NM}`);
     if (!res.ok) throw new Error("API response error");
-    
+
     const data = await res.json();
 
     if (!data.ac || data.ac.length === 0) {
@@ -273,16 +248,14 @@ async function fetchFlights() {
 
     updateMapVisuals(flights);
 
+    const defaultAirport = { code: "N/A", name: "Route Info N/A", city: "Unknown City", lat: null, lon: null };
+
     const cardsHtml = await Promise.all(flights.map(async (f, idx) => {
       const isClosest = idx === 0;
-      const routeInfo = await getRoute(f.callsign);
-      
-      const orig = getAirportInfo(routeInfo.origin);
-      const dest = {
-        ...getAirportInfo(routeInfo.dest),
-        destLat: routeInfo.destLat,
-        destLon: routeInfo.destLon
-      };
+      const route = await getRoute(f.callsign);
+
+      const orig = route?.origin || defaultAirport;
+      const dest = route?.dest || defaultAirport;
 
       const timeToDest = calculateTimeToDest(f.lat, f.lon, dest, f.speed);
       const logoUrl = getAirlineLogoUrl(f.callsign);
@@ -293,7 +266,7 @@ async function fetchFlights() {
         return `
           <div class="flight-card featured-card" id="card-${f.hex}" style="--accent-color: ${f.color};">
             <div class="featured-badge">⚡ CLOSEST IN RANGE</div>
-            
+
             <div class="card-header">
               <div class="callsign-box">
                 <span class="callsign">${f.callsign}</span>
@@ -355,13 +328,15 @@ async function fetchFlights() {
             <div class="route-panel">
               <div class="route-airports">
                 <div class="airport-node">
-                  <span class="airport-code">${orig.code}</span>
-                  <span class="airport-city"> (${orig.city})</span>
+                  <div class="airport-code">${orig.code}</div>
+                  <div class="airport-name">${orig.name}</div>
+                  <div class="airport-city">${orig.city}</div>
                 </div>
                 <div class="route-arrow">✈️</div>
                 <div class="airport-node" style="text-align: right;">
-                  <span class="airport-code">${dest.code}</span>
-                  <span class="airport-city"> (${dest.city})</span>
+                  <div class="airport-code">${dest.code}</div>
+                  <div class="airport-name">${dest.name}</div>
+                  <div class="airport-city">${dest.city}</div>
                 </div>
               </div>
             </div>
