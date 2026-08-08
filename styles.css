@@ -1,68 +1,69 @@
-/* Base Reset & Fonts */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 body {
-  background-color: #0b0e14;
-  color: #e0e6ed;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  height: 100vh;
-  overflow: hidden; /* Prevents scrollbars on TV */
+  background-color: #0b0f19;
+  color: #e2e8f0;
+  padding: 20px;
 }
 
 .dashboard-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-/* Header Bar */
-.header {
+header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #161b22;
-  padding: 16px 24px;
-  border-radius: 12px;
-  border: 1px solid #30363d;
-  margin-bottom: 24px;
-  font-size: 1.2rem;
-  font-weight: 600;
-  letter-spacing: 1px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 20px;
 }
 
-.status-dot {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  background-color: #2ea043;
-  border-radius: 50%;
-  margin-right: 10px;
-  box-shadow: 0 0 8px #2ea043;
+h1 {
+  font-size: 1.5rem;
+  letter-spacing: 2px;
+  color: #38bdf8;
 }
 
-/* Grid Layout for Flight Cards */
-.flight-grid {
+#current-time {
+  font-size: 1.5rem;
+  font-weight: bold;
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+.main-layout {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* 2x2 grid on large screens */
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
-  flex: 1;
 }
 
-/* Individual Flight Card */
-.flight-card {
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 16px;
-  padding: 20px;
+@media (max-width: 900px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.flight-grid {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  gap: 15px;
+}
+
+.flight-card {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 15px;
+  border: 1px solid #334155;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .card-top {
@@ -71,64 +72,62 @@ body {
   align-items: center;
 }
 
-.logo-badge {
-  background: #ffffff;
-  padding: 6px 12px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  height: 48px;
-}
-
-.logo-badge img {
-  max-height: 36px;
-  max-width: 120px;
-  object-fit: contain;
-}
-
 .callsign {
-  font-size: 2.2rem;
-  font-weight: 800;
-  font-family: monospace;
-  color: #58a6ff;
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #f8fafc;
 }
 
-.country {
-  font-size: 1rem;
-  color: #8b949e;
-  margin-top: 4px;
+.ac-type {
+  font-size: 0.9rem;
+  color: #38bdf8;
+  font-weight: 600;
 }
 
-/* Telemetry Grid (Speed, Altitude, Distance) */
+.plane-img {
+  width: 120px;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #0f172a;
+}
+
 .telemetry {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  background: #0d1117;
-  padding: 14px;
-  border-radius: 10px;
-  margin-top: 16px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  background: #0f172a;
+  padding: 10px;
+  border-radius: 8px;
   text-align: center;
 }
 
 .metric-label {
-  font-size: 0.85rem;
-  color: #8b949e;
+  font-size: 0.75rem;
+  color: #64748b;
   text-transform: uppercase;
 }
 
 .metric-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-family: monospace;
-  color: #3fb950; /* High contrast green */
-  margin-top: 4px;
+  font-size: 1rem;
+  font-weight: bold;
+  color: #f1f5f9;
+}
+
+.map-container {
+  height: 600px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #334155;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
 }
 
 .loading-state {
-  grid-column: span 2;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 1.8rem;
-  color: #8b949e;
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
 }
