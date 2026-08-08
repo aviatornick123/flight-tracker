@@ -1,7 +1,7 @@
 // Home Coordinates (Wokingham area)
 const HOME_LAT = 51.41;
 const HOME_LON = -0.83;
-const BOUNDING_BOX = { lamin: 51.30, lomin: -1.05, lamax: 51.52, lomax: -0.63 };
+const RADIUS_NM = 15; // 15 Nautical Miles
 
 // ICAO 3-letter to IATA 2-letter mapping
 const ICAO_TO_IATA = {
@@ -43,8 +43,8 @@ async function fetchFlights() {
   const grid = document.getElementById("flight-grid");
   if (!grid) return;
 
-  const targetUrl = `https://opensky-network.org/api/states/all?lamin=${BOUNDING_BOX.lamin}&lomin=${BOUNDING_BOX.lomin}&lamax=${BOUNDING_BOX.lamax}&lomax=${BOUNDING_BOX.lomax}`;
-  const url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`;
+  // Open community ADS-B feed (native CORS support & unlimited browser calls)
+  const url = `https://api.airplanes.live/v2/point/${HOME_LAT}/${HOME_LON}/${RADIUS_NM}`;
 
   try {
     const response = await fetch(url);
@@ -52,23 +52,21 @@ async function fetchFlights() {
     
     const data = await response.json();
 
-    if (!data.states || data.states.length === 0) {
+    if (!data.ac || data.ac.length === 0) {
       grid.innerHTML = '<div class="loading-state">No active aircraft within 15 miles</div>';
       return;
     }
 
-    const flights = data.states
-      .map(state => {
-        const callsign = state[1] ? state[1].trim() : "PRIVATE";
-        const lon = state[5];
-        const lat = state[6];
-        const altMeters = state[7] || 0;
-        const velocityMS = state[9] || 0;
-        const country = state[2] || "Unknown";
+    const flights = data.ac
+      .map(ac => {
+        const callsign = ac.flight ? ac.flight.trim() : "PRIVATE";
+        const lon = ac.lon;
+        const lat = ac.lat;
+        const altFeet = typeof ac.alt_baro === "number" ? ac.alt_baro : (ac.alt_geom || 0);
+        const speedKnots = Math.round(ac.gs || 0);
+        const country = ac.r ? `Reg: ${ac.r}` : "Tracked";
 
         const distance = (lat && lon) ? parseFloat(getDistanceInMiles(HOME_LAT, HOME_LON, lat, lon)) : 999;
-        const altFeet = Math.round(altMeters * 3.28084);
-        const speedKnots = Math.round(velocityMS * 1.94384);
 
         return { callsign, country, distance, altFeet, speedKnots };
       })
@@ -95,7 +93,7 @@ async function fetchFlights() {
           </div>
           <div>
             <div class="metric-label">Altitude</div>
-            <div class="metric-value">${f.altFeet.toLocaleString()} ft</div>
+            <div class="metric-value">${typeof f.altFeet === 'number' ? f.altFeet.toLocaleString() : f.altFeet} ft</div>
           </div>
           <div>
             <div class="metric-label">Speed</div>
