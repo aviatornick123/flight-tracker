@@ -31,6 +31,7 @@ const ICAO_TO_IATA = {
   BAW: "BA", RYR: "FR", EZY: "U2", VIR: "VS", SWR: "LX", DLH: "LH",
   AFR: "AF", KLM: "KL", SAS: "SK", FIN: "AY", THY: "TK", TAP: "TP",
   AZA: "AZ", EIN: "EI", IBE: "IB", AEE: "A3", WZZ: "W6", BCS: "QY",
+  EXS: "LS", TOM: "BY", LOG: "LM",
   // Americas
   AAL: "AA", DAL: "DL", UAL: "UA", SWA: "WN", ACA: "AC", AMX: "AM",
   TAM: "JJ", AVA: "AV", GOL: "G3", CMP: "CM"
