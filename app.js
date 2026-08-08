@@ -2,7 +2,6 @@ const HOME_LAT = 51.41;
 const HOME_LON = -0.83;
 const RADIUS_NM = 20;
 
-// Color palette for map markers, flight trails, and card accents
 const TILE_COLORS = [
   '#38bdf8', // Cyan (Closest)
   '#f59e0b', // Amber
@@ -19,25 +18,18 @@ let aircraftMarkers = {};
 let aircraftTrails = {};
 let aircraftHistory = {};
 
-// Expanded ICAO-to-IATA lookup table for logo resolution
 const ICAO_TO_IATA = {
-  // Asia-Pacific & Australasia
   CPA: "CX", HDA: "KA", SIA: "SQ", ANA: "NH", JAL: "JL", EVA: "BR", 
   CAL: "CI", THA: "TG", MAS: "MH", PAL: "PR", CEB: "5J", QFA: "QF", 
-  VOZ: "VA", ANZ: "NZ",
-  // Middle East & Africa
-  UAE: "EK", ETD: "EY", QTR: "QR", SVD: "SV", ETH: "ET", RAM: "AT",
-  // Europe
-  BAW: "BA", RYR: "FR", EZY: "U2", VIR: "VS", SWR: "LX", DLH: "LH",
-  AFR: "AF", KLM: "KL", SAS: "SK", FIN: "AY", THY: "TK", TAP: "TP",
-  AZA: "AZ", EIN: "EI", IBE: "IB", AEE: "A3", WZZ: "W6", BCS: "QY",
-  EXS: "LS", TOM: "BY", LOG: "LM",
-  // Americas
-  AAL: "AA", DAL: "DL", UAL: "UA", SWA: "WN", ACA: "AC", AMX: "AM",
-  TAM: "JJ", AVA: "AV", GOL: "G3", CMP: "CM"
+  VOZ: "VA", ANZ: "NZ", UAE: "EK", ETD: "EY", QTR: "QR", SVD: "SV", 
+  ETH: "ET", RAM: "AT", BAW: "BA", RYR: "FR", EZY: "U2", VIR: "VS", 
+  SWR: "LX", DLH: "LH", AFR: "AF", KLM: "KL", SAS: "SK", FIN: "AY", 
+  THY: "TK", TAP: "TP", AZA: "AZ", EIN: "EI", IBE: "IB", AEE: "A3", 
+  WZZ: "W6", BCS: "QY", EXS: "LS", TOM: "BY", LOG: "LM", AAL: "AA", 
+  DAL: "DL", UAL: "UA", SWA: "WN", ACA: "AC", AMX: "AM", TAM: "JJ", 
+  AVA: "AV", GOL: "G3", CMP: "CM"
 };
 
-// Local override route map for callsigns unmapped by public APIs
 const KNOWN_ROUTES = {
   AMX008: {
     airline: "Aeromexico",
@@ -180,7 +172,7 @@ function initMap() {
   const mapContainer = document.getElementById('map');
   if (!mapContainer || map) return;
 
-  // Center on Wokingham to Heathrow corridor [51.44, -0.64] at zoom level 11
+  // Widescreen view: centered on Wokingham-LHR corridor at zoom level 11
   map = L.map('map').setView([51.44, -0.64], 11);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -207,6 +199,9 @@ function initMap() {
     opacity: 0.8,
     fillOpacity: 0.7
   }).addTo(map).bindPopup("<b>London Heathrow Airport (LHR)</b>");
+
+  // Invalidate size on window resize for optimal full-width rendering
+  window.addEventListener('resize', () => map.invalidateSize());
 }
 
 function updateMapVisuals(flights) {
