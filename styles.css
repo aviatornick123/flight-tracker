@@ -2,52 +2,54 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 body {
-  background-color: #0b0f19;
-  color: #e2e8f0;
+  background-color: #0b0f17;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   padding: 20px;
 }
 
-.dashboard-container {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-header {
+.header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #1e293b;
   margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1e293b;
 }
 
-h1 {
+.header h1 {
   font-size: 1.5rem;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   color: #38bdf8;
 }
 
-#current-time {
-  font-size: 1.5rem;
-  font-weight: bold;
+.clock {
   font-family: monospace;
+  font-size: 1.25rem;
   color: #94a3b8;
 }
 
-.main-layout {
+.dashboard-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
 
 @media (max-width: 900px) {
-  .main-layout {
+  .dashboard-container {
     grid-template-columns: 1fr;
   }
+}
+
+#map {
+  height: 600px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #1e293b;
+  overflow: hidden;
 }
 
 .flight-grid {
@@ -57,19 +59,25 @@ h1 {
 }
 
 .flight-card {
-  background: #1e293b;
-  border-radius: 12px;
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
   padding: 15px;
-  border: 1px solid #334155;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  cursor: pointer;
+}
+
+.flight-card.highlighted {
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
+  transform: translateY(-2px);
+  background-color: #1e293b;
 }
 
 .card-top {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  margin-bottom: 12px;
 }
 
 .callsign-header {
@@ -79,93 +87,104 @@ h1 {
 }
 
 .callsign {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   font-weight: bold;
-  color: #f8fafc;
+  color: #ffffff;
 }
 
 .airline-logo {
-  height: 22px;
-  max-width: 60px;
+  height: 20px;
   object-fit: contain;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 2px 4px;
-  border-radius: 4px;
 }
 
 .ac-type {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: #38bdf8;
-  font-weight: 600;
   margin-top: 2px;
 }
 
 .route-badge {
-  font-size: 0.85rem;
-  font-weight: bold;
-  color: #f59e0b;
+  font-size: 0.8rem;
+  color: #fbbf24;
   margin-top: 4px;
+  font-weight: 500;
 }
 
 .plane-img {
-  width: 120px;
+  width: 110px;
   height: 70px;
   object-fit: cover;
   border-radius: 6px;
-  background: #0f172a;
+  background-color: #1e293b;
+  border: 1px solid #334155;
 }
 
 .telemetry {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
-  background: #0f172a;
+  background-color: #090d16;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: 6px;
   text-align: center;
 }
 
 .metric-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #64748b;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
 }
 
 .metric-value {
-  font-size: 1rem;
-  font-weight: bold;
-  color: #f1f5f9;
-}
-
-.map-container {
-  height: 600px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid #334155;
-}
-
-#map {
-  width: 100%;
-  height: 100%;
-}
-
-.plane-marker-icon {
-  background: none !important;
-  border: none !important;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
 }
 
 .loading-state {
   text-align: center;
   padding: 40px;
   color: #64748b;
-}
-.flight-card {
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  font-size: 1.1rem;
 }
 
-.flight-card.highlighted {
-  border-color: #38bdf8 !important;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
-  transform: translateY(-2px);
-  background-color: #1e293b;
+/* Map Altitude Legend Styling */
+.map-legend {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #f8fafc;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.legend-title {
+  font-weight: bold;
+  color: #94a3b8;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
 }
