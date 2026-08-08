@@ -3,33 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Radar Dashboard</title>
-  <link rel="stylesheet" href="styles.css">
-  <!-- Leaflet CSS for Map -->
+  <title>Nearby Airspace Radar</title>
+
+  <!-- Favicon Fix: Uses an inline airplane emoji so the browser doesn't throw a 404 error -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✈️</text></svg>">
+
+  <!-- Leaflet CSS for Map Rendering -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="dashboard-container">
-    <header>
-      <h1>NEARBY AIRSPACE RADAR</h1>
-      <div id="current-time">--:--:--</div>
-    </header>
 
-    <div class="main-layout">
-      <!-- Flight Cards Grid -->
-      <div id="flight-grid" class="flight-grid">
-        <div class="loading-state">Scanning sky...</div>
-      </div>
+  <header class="header">
+    <h1>NEARBY AIRSPACE RADAR</h1>
+    <div id="current-time" class="clock">--:--:--</div>
+  </header>
 
-      <!-- Live Map -->
-      <div class="map-container">
-        <div id="map"></div>
-      </div>
+  <main class="dashboard-container">
+    <!-- Map Container (Left Column) -->
+    <div id="map"></div>
+
+    <!-- Live Flight Feed (Right Column) -->
+    <div id="flight-grid" class="flight-grid">
+      <div class="loading-state">Scanning airspace...</div>
     </div>
-  </div>
+  </main>
 
-  <!-- Leaflet JS -->
+  <!-- Leaflet Map JS Library -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Main Radar Application Script -->
   <script src="app.js"></script>
+
 </body>
 </html>
