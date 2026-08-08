@@ -1,427 +1,354 @@
-const HOME_LAT = 51.41;
-const HOME_LON = -0.83;
-const RADIUS_NM = 20;
-
-// Color palette linking map markers, flight trails, and card accents
-const TILE_COLORS = [
-  '#38bdf8', // Cyan (Closest)
-  '#f59e0b', // Amber
-  '#10b981', // Emerald
-  '#ec4899', // Pink
-  '#a855f7', // Purple
-  '#f97316', // Orange
-  '#06b6d4', // Teal
-  '#84cc16'  // Lime
-];
-
-let map;
-let aircraftMarkers = {};
-let aircraftTrails = {};
-let aircraftHistory = {};
-
-// Expanded ICAO-to-IATA lookup table for logo resolution
-const ICAO_TO_IATA = {
-  // Asia-Pacific & Australasia
-  CPA: "CX", HDA: "KA", SIA: "SQ", ANA: "NH", JAL: "JL", EVA: "BR", 
-  CAL: "CI", THA: "TG", MAS: "MH", PAL: "PR", CEB: "5J", QFA: "QF", 
-  VOZ: "VA", ANZ: "NZ",
-  // Middle East & Africa
-  UAE: "EK", ETD: "EY", QTR: "QR", SVD: "SV", ETH: "ET", RAM: "AT",
-  // Europe
-  BAW: "BA", RYR: "FR", EZY: "U2", VIR: "VS", SWR: "LX", DLH: "LH",
-  AFR: "AF", KLM: "KL", SAS: "SK", FIN: "AY", THY: "TK", TAP: "TP",
-  AZA: "AZ", EIN: "EI", IBE: "IB", AEE: "A3", WZZ: "W6", BCS: "QY",
-  EXS: "LS", TOM: "BY", LOG: "LM",
-  // Americas
-  AAL: "AA", DAL: "DL", UAL: "UA", SWA: "WN", ACA: "AC", AMX: "AM",
-  TAM: "JJ", AVA: "AV", GOL: "G3", CMP: "CM"
-};
-
-// Local override route map for callsigns unmapped by public APIs
-const KNOWN_ROUTES = {
-  AMX008: {
-    airline: "Aeromexico",
-    origin: { code: "LHR", name: "Heathrow Airport", city: "London", country: "United Kingdom", lat: 51.4700, lon: -0.4543 },
-    dest: { code: "MEX", name: "Mexico City International", city: "Mexico City", country: "Mexico", lat: 19.4363, lon: -99.0721 }
-  },
-  AMX8: {
-    airline: "Aeromexico",
-    origin: { code: "LHR", name: "Heathrow Airport", city: "London", country: "United Kingdom", lat: 51.4700, lon: -0.4543 },
-    dest: { code: "MEX", name: "Mexico City International", city: "Mexico City", country: "Mexico", lat: 19.4363, lon: -99.0721 }
-  }
-};
-
-function getDistanceInMiles(lat1, lon1, lat2, lon2) {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return "0.0";
-  const R = 3958.8;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return (R * c).toFixed(1);
+:root {
+  --bg-main: #090d16;
+  --bg-card: #111827;
+  --bg-card-hover: #1f2937;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --accent-cyan: #38bdf8;
 }
 
-async function fetchRouteFromApi(callsignQuery) {
-  try {
-    const res = await fetch(`https://api.adsbdb.com/v0/callsign/${callsignQuery}`);
-    if (res.ok) {
-      const data = await res.json();
-      const flightRoute = data?.response?.flightroute;
-      if (flightRoute?.origin && flightRoute?.destination) {
-        return {
-          airline: flightRoute.airline?.name || "",
-          origin: {
-            code: flightRoute.origin.iata_code || flightRoute.origin.icao_code || "N/A",
-            name: flightRoute.origin.name || "Unknown Airport",
-            city: flightRoute.origin.municipality || "Unknown City",
-            country: flightRoute.origin.country_name || flightRoute.origin.country_iso_name || "",
-            lat: flightRoute.origin.latitude || null,
-            lon: flightRoute.origin.longitude || null
-          },
-          dest: {
-            code: flightRoute.destination.iata_code || flightRoute.destination.icao_code || "N/A",
-            name: flightRoute.destination.name || "Unknown Airport",
-            city: flightRoute.destination.municipality || "Unknown City",
-            country: flightRoute.destination.country_name || flightRoute.destination.country_iso_name || "",
-            lat: flightRoute.destination.latitude || null,
-            lon: flightRoute.destination.longitude || null
-          }
-        };
-      }
-    }
-  } catch (e) {}
-  return null;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-async function getRoute(callsign) {
-  if (!callsign || callsign === "PRIVATE") return null;
-  const cleanCallsign = callsign.trim().toUpperCase();
-
-  // 1. Direct API lookup
-  let route = await fetchRouteFromApi(cleanCallsign);
-  if (route) return route;
-
-  // 2. Strip padded zeroes (e.g., AMX008 -> AMX8)
-  const unpaddedCallsign = cleanCallsign.replace(/^([A-Z]+)0+(?=\d)/, '$1');
-  if (unpaddedCallsign !== cleanCallsign) {
-    route = await fetchRouteFromApi(unpaddedCallsign);
-    if (route) return route;
-  }
-
-  // 3. Fallback map lookup
-  if (KNOWN_ROUTES[cleanCallsign]) return KNOWN_ROUTES[cleanCallsign];
-  if (KNOWN_ROUTES[unpaddedCallsign]) return KNOWN_ROUTES[unpaddedCallsign];
-
-  return null;
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-function calculateTimeToDest(planeLat, planeLon, destObj, speedKnots) {
-  if (!speedKnots || speedKnots < 50 || !destObj || !destObj.lat || !destObj.lon) return "N/A";
-
-  const distToDestMiles = parseFloat(getDistanceInMiles(planeLat, planeLon, destObj.lat, destObj.lon));
-  const speedMph = speedKnots * 1.15078;
-  const hours = distToDestMiles / speedMph;
-  const minutes = Math.round(hours * 60);
-
-  if (minutes < 60) return `${minutes} mins`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${h}h ${m < 10 ? '0' : ''}${m}m`;
+/* --- Header Bar --- */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  background: rgba(17, 24, 39, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
-function getAirlineLogoUrl(callsign) {
-  if (!callsign || callsign.length < 3) return null;
-  const icao = callsign.substring(0, 3).toUpperCase();
-  const iata = ICAO_TO_IATA[icao];
-
-  if (iata) {
-    return `https://images.kiwi.com/airlines/64/${iata}.png`;
-  }
-  return `https://assets.duffel.com/img/airlines/for-floor/sq/${icao}.png`;
+h1 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--accent-cyan);
+  text-transform: uppercase;
 }
 
-async function getPlanePhotoUrl(reg) {
-  if (!reg) return "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=300&q=80";
-  try {
-    const res = await fetch(`https://api.planespotters.net/pub/photos/reg/${reg}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.photos && data.photos.length > 0) {
-        return data.photos[0].thumbnail_large.src;
-      }
-    }
-  } catch (e) {}
-  return "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=300&q=80";
+#current-time {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
 }
 
-function createPlaneSvgIcon(heading, color, isFeatured) {
-  const size = isFeatured ? 32 : 22;
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="${color}" style="transform: rotate(${heading}deg); filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.8));">
-      <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
-    </svg>`;
-  return L.divIcon({
-    html: svg,
-    className: 'plane-marker-icon',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2]
-  });
+/* --- Dashboard Main Grid Layout --- */
+.dashboard-container {
+  display: grid;
+  grid-template-columns: 380px 1fr; /* Compact map, expanded flight feed */
+  gap: 20px;
+  padding: 20px;
+  max-width: 1800px;
+  margin: 0 auto;
+  width: 100%;
+  flex: 1;
 }
 
-function updateClock() {
-  const clockEl = document.getElementById('current-time');
-  if (clockEl) {
-    const now = new Date();
-    clockEl.textContent = now.toTimeString().split(' ')[0];
+@media (max-width: 1024px) {
+  .dashboard-container {
+    grid-template-columns: 1fr; /* Stack vertically on smaller screens */
   }
 }
 
-function initMap() {
-  const mapContainer = document.getElementById('map');
-  if (!mapContainer || map) return;
-
-  map = L.map('map').setView([HOME_LAT, HOME_LON], 10);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-    maxZoom: 19
-  }).addTo(map);
-
-  L.circleMarker([HOME_LAT, HOME_LON], {
-    radius: 7,
-    fillColor: '#ffffff',
-    color: '#38bdf8',
-    weight: 3,
-    opacity: 1,
-    fillOpacity: 1
-  }).addTo(map).bindPopup("Radar Center");
+/* --- Map Panel (Smaller & Sticky) --- */
+.map-panel {
+  position: sticky;
+  top: 80px;
+  height: calc(100vh - 120px);
+  min-height: 400px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
-function updateMapVisuals(flights) {
-  if (!map) return;
-
-  const currentHexes = new Set();
-
-  flights.forEach((f, idx) => {
-    currentHexes.add(f.hex);
-    const isFeatured = idx === 0;
-
-    if (!aircraftHistory[f.hex]) {
-      aircraftHistory[f.hex] = [];
-    }
-    const history = aircraftHistory[f.hex];
-    if (history.length === 0 || history[history.length - 1][0] !== f.lat || history[history.length - 1][1] !== f.lon) {
-      history.push([f.lat, f.lon]);
-      if (history.length > 20) history.shift();
-    }
-
-    const icon = createPlaneSvgIcon(f.heading, f.color, isFeatured);
-    if (aircraftMarkers[f.hex]) {
-      aircraftMarkers[f.hex].setLatLng([f.lat, f.lon]);
-      aircraftMarkers[f.hex].setIcon(icon);
-    } else {
-      const marker = L.marker([f.lat, f.lon], { icon }).addTo(map);
-      marker.bindPopup(`<b>${f.callsign}</b><br>${f.type}<br>Alt: ${f.alt.toLocaleString()} ft<br>Speed: ${f.speed} kts`);
-      aircraftMarkers[f.hex] = marker;
-    }
-
-    if (aircraftTrails[f.hex]) {
-      aircraftTrails[f.hex].setLatLngs(history);
-      aircraftTrails[f.hex].setStyle({ color: f.color });
-    } else if (history.length >= 1) {
-      const polyline = L.polyline(history, {
-        color: f.color,
-        weight: isFeatured ? 3 : 2,
-        opacity: 0.8,
-        dashArray: '4, 6'
-      }).addTo(map);
-      aircraftTrails[f.hex] = polyline;
-    }
-  });
-
-  Object.keys(aircraftMarkers).forEach(hex => {
-    if (!currentHexes.has(hex)) {
-      map.removeLayer(aircraftMarkers[hex]);
-      delete aircraftMarkers[hex];
-
-      if (aircraftTrails[hex]) {
-        map.removeLayer(aircraftTrails[hex]);
-        delete aircraftTrails[hex];
-      }
-      delete aircraftHistory[hex];
-    }
-  });
+#map {
+  width: 100%;
+  height: 100%;
+  background: #000;
 }
 
-async function fetchFlights() {
-  const grid = document.getElementById("flight-grid");
-  if (!grid) return;
+/* Custom leaflet popup style */
+.leaflet-popup-content-wrapper {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color);
+  border-radius: 8px !important;
+}
+.leaflet-popup-tip {
+  background: var(--bg-card) !important;
+}
 
-  try {
-    const res = await fetch(`https://api.airplanes.live/v2/point/${HOME_LAT}/${HOME_LON}/${RADIUS_NM}`);
-    if (!res.ok) throw new Error("API response error");
+/* --- Flight Grid & Cards Feed --- */
+.flight-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
-    const data = await res.json();
+#flight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
 
-    if (!data.ac || data.ac.length === 0) {
-      grid.innerHTML = '<div class="loading-state">No airborne aircraft within radar range</div>';
-      return;
-    }
+.loading-state {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  grid-column: 1 / -1;
+}
 
-    const flights = data.ac
-      .filter(ac => ac.lat && ac.lon && ac.alt_baro !== "ground")
-      .map(ac => ({
-        callsign: ac.flight ? ac.flight.trim() : "PRIVATE",
-        hex: ac.hex,
-        type: ac.desc || ac.t || "Aircraft",
-        reg: ac.r || "",
-        lat: ac.lat,
-        lon: ac.lon,
-        alt: ac.alt_baro || 0,
-        speed: Math.round(ac.gs || 0),
-        heading: ac.track || 0,
-        distance: parseFloat(getDistanceInMiles(HOME_LAT, HOME_LON, ac.lat, ac.lon))
-      }))
-      .sort((a, b) => a.distance - b.distance)
-      .map((f, idx) => ({
-        ...f,
-        color: TILE_COLORS[idx % TILE_COLORS.length]
-      }));
+/* --- Standard Flight Card --- */
+.flight-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-color, var(--accent-cyan));
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
 
-    updateMapVisuals(flights);
+.flight-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
 
-    const defaultAirport = { code: "N/A", name: "Route Info N/A", city: "Unknown City", country: "", lat: null, lon: null };
+.card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
-    const cardsHtml = await Promise.all(flights.map(async (f, idx) => {
-      const isClosest = idx === 0;
-      const route = await getRoute(f.callsign);
+.callsign-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 
-      const airlineName = route?.airline || "";
-      const orig = route?.origin || defaultAirport;
-      const dest = route?.dest || defaultAirport;
+.callsign {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+}
 
-      const timeToDest = calculateTimeToDest(f.lat, f.lon, dest, f.speed);
-      const logoUrl = getAirlineLogoUrl(f.callsign);
+.airline-logo {
+  height: 24px;
+  max-width: 90px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
 
-      if (isClosest) {
-        const photoUrl = await getPlanePhotoUrl(f.reg);
+.airline-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
 
-        return `
-          <div class="flight-card featured-card" id="card-${f.hex}" style="--accent-color: ${f.color};">
-            <div class="featured-badge">⚡ CLOSEST IN RANGE</div>
+.ac-type {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
 
-            <div class="card-header">
-              <div class="callsign-box">
-                <span class="callsign">${f.callsign}</span>
-                ${logoUrl ? `<img src="${logoUrl}" class="airline-logo" alt="Airline logo" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
-              </div>
-              ${airlineName ? `<div class="airline-name">${airlineName}</div>` : ''}
-              <div class="ac-type">${f.type} ${f.reg ? `(${f.reg})` : ''}</div>
-            </div>
+/* Route display */
+.route-panel {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
 
-            <div class="featured-media">
-              <img src="${photoUrl}" class="plane-photo" alt="Aircraft photo" onerror="this.src='https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=300&q=80'">
-              <div class="route-panel">
-                <div class="route-airports">
-                  <div class="airport-node">
-                    <div class="airport-code">${orig.code}</div>
-                    <div class="airport-name">${orig.name}</div>
-                    <div class="airport-city">${orig.city}${orig.country ? `, ${orig.country}` : ''}</div>
-                  </div>
-                  <div class="route-arrow">✈️</div>
-                  <div class="airport-node" style="text-align: right;">
-                    <div class="airport-code">${dest.code}</div>
-                    <div class="airport-name">${dest.name}</div>
-                    <div class="airport-city">${dest.city}${dest.country ? `, ${dest.country}` : ''}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+.route-airports {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 
-            <div class="telemetry">
-              <div>
-                <div class="metric-label">Distance</div>
-                <div class="metric-value">${f.distance} mi</div>
-              </div>
-              <div>
-                <div class="metric-label">Altitude</div>
-                <div class="metric-value">${f.alt.toLocaleString()} ft</div>
-              </div>
-              <div>
-                <div class="metric-label">Speed</div>
-                <div class="metric-value">${f.speed} kts</div>
-              </div>
-              <div>
-                <div class="metric-label">Time to Dest.</div>
-                <div class="metric-value" style="color: ${f.color};">${timeToDest}</div>
-              </div>
-            </div>
-          </div>
-        `;
-      } else {
-        return `
-          <div class="flight-card" id="card-${f.hex}" style="--accent-color: ${f.color};">
-            <div class="card-header">
-              <div class="callsign-box">
-                <span class="callsign">${f.callsign}</span>
-                ${logoUrl ? `<img src="${logoUrl}" class="airline-logo" alt="Airline logo" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
-              </div>
-              ${airlineName ? `<div class="airline-name">${airlineName}</div>` : ''}
-              <div class="ac-type">${f.type} ${f.reg ? `(${f.reg})` : ''}</div>
-            </div>
+.airport-node {
+  flex: 1;
+}
 
-            <div class="route-panel">
-              <div class="route-airports">
-                <div class="airport-node">
-                  <div class="airport-code">${orig.code}</div>
-                  <div class="airport-name">${orig.name}</div>
-                  <div class="airport-city">${orig.city}${orig.country ? `, ${orig.country}` : ''}</div>
-                </div>
-                <div class="route-arrow">✈️</div>
-                <div class="airport-node" style="text-align: right;">
-                  <div class="airport-code">${dest.code}</div>
-                  <div class="airport-name">${dest.name}</div>
-                  <div class="airport-city">${dest.city}${dest.country ? `, ${dest.country}` : ''}</div>
-                </div>
-              </div>
-            </div>
+.airport-code {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+}
 
-            <div class="telemetry">
-              <div>
-                <div class="metric-label">Distance</div>
-                <div class="metric-value">${f.distance} mi</div>
-              </div>
-              <div>
-                <div class="metric-label">Altitude</div>
-                <div class="metric-value">${f.alt.toLocaleString()} ft</div>
-              </div>
-              <div>
-                <div class="metric-label">Speed</div>
-                <div class="metric-value">${f.speed} kts</div>
-              </div>
-              <div>
-                <div class="metric-label">Time to Dest.</div>
-                <div class="metric-value" style="color: ${f.color};">${timeToDest}</div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    }));
+.airport-name {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
 
-    grid.innerHTML = cardsHtml.join('');
-  } catch (e) {
-    console.error("Flight fetch error:", e);
-    grid.innerHTML = '<div class="loading-state">Error loading live radar data. Retrying...</div>';
+.airport-city {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.route-arrow {
+  font-size: 0.9rem;
+  opacity: 0.6;
+  padding: 0 8px;
+}
+
+/* Telemetry Grid */
+.telemetry {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.metric-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.metric-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* --- ⚡ FEATURED CARD (CLOSEST IN RANGE) --- */
+.featured-card {
+  grid-column: 1 / -1; /* Spans across all grid columns */
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(30, 41, 59, 0.95));
+  border: 2px solid var(--accent-color, var(--accent-cyan));
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15);
+  position: relative;
+  gap: 16px;
+}
+
+.featured-badge {
+  align-self: flex-start;
+  background: var(--accent-color, var(--accent-cyan));
+  color: #000000;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.featured-card .callsign {
+  font-size: 1.8rem;
+}
+
+.featured-card .airline-logo {
+  height: 32px;
+  max-width: 120px;
+}
+
+.featured-card .airline-name {
+  font-size: 1rem;
+}
+
+.featured-card .ac-type {
+  font-size: 0.9rem;
+}
+
+/* Featured Media Section: Large Plane Photo + Route Box Side-by-Side */
+.featured-media {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 640px) {
+  .featured-media {
+    grid-template-columns: 1fr;
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  initMap();
-  updateClock();
-  setInterval(updateClock, 1000);
-  fetchFlights();
-  setInterval(fetchFlights, 10000);
-});
+.plane-photo {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.featured-card .route-panel {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.featured-card .airport-code {
+  font-size: 1.6rem;
+}
+
+.featured-card .airport-name {
+  font-size: 0.85rem;
+  max-width: 200px;
+}
+
+.featured-card .airport-city {
+  font-size: 0.8rem;
+}
+
+.featured-card .route-arrow {
+  font-size: 1.4rem;
+}
+
+.featured-card .telemetry {
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.featured-card .metric-label {
+  font-size: 0.75rem;
+}
+
+.featured-card .metric-value {
+  font-size: 1.25rem;
+}
