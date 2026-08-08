@@ -149,6 +149,11 @@ h1 {
   height: 100%;
 }
 
+.plane-marker-icon {
+  background: none !important;
+  border: none !important;
+}
+
 .loading-state {
   text-align: center;
   padding: 40px;
