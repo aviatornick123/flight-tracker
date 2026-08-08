@@ -10,6 +10,14 @@ let trailPolylines = {};
 const routeCache = {};
 const photoCache = {};
 
+// Palette used to color-code each flight card and its matching plane on the map
+const FLIGHT_PALETTE = [
+  { main: "#38bdf8", border: "#0284c7", text: "#38bdf8" }, // Flight #1: Cyan
+  { main: "#f59e0b", border: "#d97706", text: "#fbbf24" }, // Flight #2: Amber
+  { main: "#c084fc", border: "#9333ea", text: "#c084fc" }, // Flight #3: Purple
+  { main: "#34d399", border: "#059669", text: "#34d399" }  // Flight #4: Emerald
+];
+
 const ICAO_TO_IATA = {
   BAW: "BA", ACA: "AC", EIN: "EI", EZY: "U2", EJU: "EC",
   RYR: "FR", VIR: "VS", DLH: "LH", AAL: "AA", DAL: "DL",
@@ -53,12 +61,6 @@ function getHeadingDirection(track) {
   return `${Math.round(track)}° ${dirs[index]}`;
 }
 
-function getAltitudeColor(altFeet) {
-  if (altFeet < 5000) return "#f59e0b";  // Gold (Low / Approach)
-  if (altFeet < 18000) return "#38bdf8"; // Sky Blue (Mid Altitude)
-  return "#c084fc";                      // Purple (High Altitude / Cruise)
-}
-
 function getLogoUrl(callsign) {
   if (!callsign) return "";
   const trimmed = callsign.trim();
@@ -67,20 +69,25 @@ function getLogoUrl(callsign) {
   return `https://pics.avs.io/200/80/${iata}.png`;
 }
 
-function createRotatedPlaneIcon(heading, altFeet) {
+function createPlaneMarkerIcon(heading, theme, index, callsign) {
   const angle = heading || 0;
-  const color = getAltitudeColor(altFeet || 0);
-  const svg = `
-    <div style="transform: rotate(${angle}deg); width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.8));">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="${color}" stroke="#0f172a" stroke-width="1.5">
-        <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
-      </svg>
+  const html = `
+    <div class="plane-marker-wrapper">
+      <div class="plane-svg-icon" style="transform: rotate(${angle}deg);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="${theme.main}" stroke="#0b0f17" stroke-width="1.5">
+          <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+        </svg>
+      </div>
+      <div class="plane-marker-tag" style="background-color: ${theme.main}; color: #0b0f17;">
+        #${index + 1} ${callsign}
+      </div>
     </div>`;
+
   return L.divIcon({
-    html: svg,
-    className: 'plane-marker-icon',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
+    html: html,
+    className: 'custom-plane-marker',
+    iconSize: [60, 50],
+    iconAnchor: [30, 20]
   });
 }
 
@@ -116,7 +123,7 @@ async function getRoute(callsign, hex) {
 
   const proxy = "https://corsproxy.io/?";
 
-  // Method 1: HexDB by Callsign via CORS Proxy
+  // Method 1: HexDB by Callsign via Proxy
   try {
     const res = await fetch(`${proxy}${encodeURIComponent(`https://hexdb.io/api/v1/route/icao/${clean}`)}`);
     if (res.ok) {
@@ -129,7 +136,7 @@ async function getRoute(callsign, hex) {
     }
   } catch (e) {}
 
-  // Method 2: ADSB.lol via CORS Proxy
+  // Method 2: ADSB.lol via Proxy
   try {
     const res = await fetch(`${proxy}${encodeURIComponent(`https://api.adsb.lol/v2/callsign/${clean}`)}`);
     if (res.ok) {
@@ -146,7 +153,7 @@ async function getRoute(callsign, hex) {
     }
   } catch (e) {}
 
-  // Method 3: ADSBdb API
+  // Method 3: ADSBdb API via Proxy
   try {
     const res = await fetch(`${proxy}${encodeURIComponent(`https://api.adsbdb.com/v0/callsign/${clean}`)}`);
     if (res.ok) {
@@ -191,23 +198,6 @@ function unhighlightMarker(callsign) {
   }
 }
 
-function addLegend() {
-  const legend = L.control({ position: 'bottomright' });
-
-  legend.onAdd = function () {
-    const div = L.DomUtil.create('div', 'map-legend');
-    div.innerHTML = `
-      <div class="legend-title">Altitude</div>
-      <div class="legend-item"><span class="legend-color" style="background: #f59e0b;"></span> &lt; 5,000 ft</div>
-      <div class="legend-item"><span class="legend-color" style="background: #38bdf8;"></span> 5,000 - 18,000 ft</div>
-      <div class="legend-item"><span class="legend-color" style="background: #c084fc;"></span> &gt; 18,000 ft</div>
-    `;
-    return div;
-  };
-
-  legend.addTo(map);
-}
-
 function initMap() {
   if (map) return;
   map = L.map('map').setView([HOME_LAT, HOME_LON], 10);
@@ -223,8 +213,6 @@ function initMap() {
     fillOpacity: 0.8,
     radius: 8
   }).addTo(map).bindPopup("<b>Home Radar (Wokingham)</b>");
-
-  addLegend();
 }
 
 function updateClock() {
@@ -246,13 +234,22 @@ async function fetchFlights() {
     const data = await response.json();
 
     if (!data.ac || data.ac.length === 0) {
-      grid.innerHTML = '<div class="loading-state">No active aircraft within range</div>';
+      grid.innerHTML = '<div class="loading-state">No airborne aircraft within range</div>';
       return;
     }
 
     const activeCallsigns = new Set();
 
+    // Filter out ground planes and parse airborne flights
     const sortedFlights = data.ac
+      .filter(ac => {
+        const isGround =
+          ac.alt_baro === "ground" ||
+          ac.alt_geom === "ground" ||
+          ac.gnd === 1 ||
+          (typeof ac.alt_baro === "number" && ac.alt_baro < 150 && (ac.gs || 0) < 35);
+        return !isGround;
+      })
       .map(ac => {
         const callsign = ac.flight ? ac.flight.trim() : "PRIVATE";
         const hex = ac.hex || "";
@@ -273,20 +270,36 @@ async function fetchFlights() {
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 4);
 
-    // Update Map Markers & Trails
-    sortedFlights.forEach(f => {
+    if (sortedFlights.length === 0) {
+      grid.innerHTML = '<div class="loading-state">No airborne aircraft within range</div>';
+      
+      // Clear all existing map markers
+      Object.keys(aircraftMarkers).forEach(cs => {
+        map.removeLayer(aircraftMarkers[cs]);
+        delete aircraftMarkers[cs];
+        if (trailPolylines[cs]) {
+          map.removeLayer(trailPolylines[cs]);
+          delete trailPolylines[cs];
+        }
+        delete flightTrails[cs];
+      });
+      return;
+    }
+
+    // Update Map Markers & Trails with distinct color themes
+    sortedFlights.forEach((f, idx) => {
       if (f.lat && f.lon) {
         activeCallsigns.add(f.callsign);
-        const altColor = getAltitudeColor(f.altFeet);
+        const theme = FLIGHT_PALETTE[idx % FLIGHT_PALETTE.length];
 
-        // Marker Creation & Listener Setup
+        // Marker Creation & Updates
         if (aircraftMarkers[f.callsign]) {
           aircraftMarkers[f.callsign].setLatLng([f.lat, f.lon]);
-          aircraftMarkers[f.callsign].setIcon(createRotatedPlaneIcon(f.track, f.altFeet));
+          aircraftMarkers[f.callsign].setIcon(createPlaneMarkerIcon(f.track, theme, idx, f.callsign));
         } else {
           const marker = L.marker([f.lat, f.lon], {
-            icon: createRotatedPlaneIcon(f.track, f.altFeet)
-          }).addTo(map).bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet.toLocaleString()} ft`);
+            icon: createPlaneMarkerIcon(f.track, theme, idx, f.callsign)
+          }).addTo(map).bindPopup(`<b>#${idx + 1} ${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet.toLocaleString()} ft`);
 
           marker.on('mouseover', () => highlightCard(f.callsign));
           marker.on('mouseout', () => unhighlightCard(f.callsign));
@@ -303,19 +316,19 @@ async function fetchFlights() {
 
         if (trailPolylines[f.callsign]) {
           trailPolylines[f.callsign].setLatLngs(flightTrails[f.callsign]);
-          trailPolylines[f.callsign].setStyle({ color: altColor });
+          trailPolylines[f.callsign].setStyle({ color: theme.main });
         } else {
           trailPolylines[f.callsign] = L.polyline(flightTrails[f.callsign], {
-            color: altColor,
-            weight: 2.5,
-            opacity: 0.8,
+            color: theme.main,
+            weight: 3,
+            opacity: 0.85,
             dashArray: '5, 5'
           }).addTo(map);
         }
       }
     });
 
-    // Cleanup stale markers/trails
+    // Clean up stale markers/trails
     Object.keys(aircraftMarkers).forEach(cs => {
       if (!activeCallsigns.has(cs)) {
         map.removeLayer(aircraftMarkers[cs]);
@@ -328,15 +341,15 @@ async function fetchFlights() {
       }
     });
 
-    // Build Telemetry Cards
-    const cardsHtml = await Promise.all(sortedFlights.map(async f => {
+    // Build Cards with Matching Color Palette
+    const cardsHtml = await Promise.all(sortedFlights.map(async (f, idx) => {
       const [photoUrl, route] = await Promise.all([
         getAircraftPhoto(f.reg),
         getRoute(f.callsign, f.hex)
       ]);
 
       const logoUrl = getLogoUrl(f.callsign);
-      const altColor = getAltitudeColor(f.altFeet);
+      const theme = FLIGHT_PALETTE[idx % FLIGHT_PALETTE.length];
       
       let altTrend = "";
       if (f.vertRate > 250) altTrend = " ⬆️";
@@ -348,12 +361,13 @@ async function fetchFlights() {
 
       return `
         <div class="flight-card" id="card-${f.callsign}" 
-             style="border-left: 6px solid ${altColor};" 
+             style="border-left: 6px solid ${theme.main};" 
              onmouseover="highlightMarker('${f.callsign}')" 
              onmouseout="unhighlightMarker('${f.callsign}')">
           <div class="card-top">
             <div>
               <div class="callsign-header">
+                <span class="index-badge" style="background-color: ${theme.main}; color: #0b0f17;">#${idx + 1}</span>
                 <span class="callsign">${f.callsign}</span>
                 <img class="airline-logo" src="${logoUrl}" onerror="this.style.display='none'" />
               </div>
@@ -369,7 +383,7 @@ async function fetchFlights() {
             </div>
             <div>
               <div class="metric-label">Altitude</div>
-              <div class="metric-value" style="color: ${altColor};">${f.altFeet.toLocaleString()} ft${altTrend}</div>
+              <div class="metric-value" style="color: ${theme.main};">${f.altFeet.toLocaleString()} ft${altTrend}</div>
             </div>
             <div>
               <div class="metric-label">Speed</div>
