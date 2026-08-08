@@ -18,8 +18,9 @@ let aircraftMarkers = {};
 let aircraftTrails = {};
 let aircraftHistory = {};
 
+// ICAO to IATA mapping for logo fetching
 const ICAO_TO_IATA = {
-  CPA: "CX", HDA: "KA", SIA: "SQ", ANA: "NH", JAL: "JL", EVA: "BR", 
+  MSR: "MS", CPA: "CX", HDA: "KA", SIA: "SQ", ANA: "NH", JAL: "JL", EVA: "BR", 
   CAL: "CI", THA: "TG", MAS: "MH", PAL: "PR", CEB: "5J", QFA: "QF", 
   VOZ: "VA", ANZ: "NZ", UAE: "EK", ETD: "EY", QTR: "QR", SVD: "SV", 
   ETH: "ET", RAM: "AT", BAW: "BA", RYR: "FR", EZY: "U2", VIR: "VS", 
@@ -28,6 +29,14 @@ const ICAO_TO_IATA = {
   WZZ: "W6", BCS: "QY", EXS: "LS", TOM: "BY", LOG: "LM", AAL: "AA", 
   DAL: "DL", UAL: "UA", SWA: "WN", ACA: "AC", AMX: "AM", TAM: "JJ", 
   AVA: "AV", GOL: "G3", CMP: "CM"
+};
+
+// Fallback airline names if API does not return one
+const ICAO_TO_AIRLINE = {
+  MSR: "Egyptair", BAW: "British Airways", UAE: "Emirates", ETD: "Etihad Airways",
+  QTR: "Qatar Airways", SWR: "Swiss International", DLH: "Lufthansa", AFR: "Air France",
+  KLM: "KLM", VIR: "Virgin Atlantic", RYR: "Ryanair", EZY: "easyJet", AAL: "American Airlines",
+  DAL: "Delta Air Lines", UAL: "United Airlines", AMX: "Aeromexico"
 };
 
 const KNOWN_ROUTES = {
@@ -132,6 +141,13 @@ function getAirlineLogoUrl(callsign) {
   return `https://assets.duffel.com/img/airlines/for-floor/sq/${icao}.png`;
 }
 
+function getAirlineName(callsign, apiAirlineName) {
+  if (apiAirlineName) return apiAirlineName;
+  if (!callsign || callsign.length < 3) return "";
+  const icao = callsign.substring(0, 3).toUpperCase();
+  return ICAO_TO_AIRLINE[icao] || "";
+}
+
 async function getPlanePhotoUrl(reg) {
   if (!reg) return "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=300&q=80";
   try {
@@ -172,7 +188,6 @@ function initMap() {
   const mapContainer = document.getElementById('map');
   if (!mapContainer || map) return;
 
-  // Widescreen view: centered on Wokingham-LHR corridor at zoom level 11
   map = L.map('map').setView([51.44, -0.64], 11);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -180,7 +195,6 @@ function initMap() {
     maxZoom: 19
   }).addTo(map);
 
-  // Home / Wokingham Marker
   L.circleMarker([HOME_LAT, HOME_LON], {
     radius: 7,
     fillColor: '#38bdf8',
@@ -190,7 +204,6 @@ function initMap() {
     fillOpacity: 0.9
   }).addTo(map).bindPopup("<b>Wokingham</b><br>Radar Center");
 
-  // Heathrow Airport Reference Marker
   L.circleMarker([51.47, -0.4543], {
     radius: 5,
     fillColor: '#f59e0b',
@@ -200,7 +213,6 @@ function initMap() {
     fillOpacity: 0.7
   }).addTo(map).bindPopup("<b>London Heathrow Airport (LHR)</b>");
 
-  // Invalidate size on window resize for optimal full-width rendering
   window.addEventListener('resize', () => map.invalidateSize());
 }
 
@@ -303,7 +315,7 @@ async function fetchFlights() {
       const isClosest = idx === 0;
       const route = await getRoute(f.callsign);
 
-      const airlineName = route?.airline || "";
+      const airlineName = getAirlineName(f.callsign, route?.airline);
       const orig = route?.origin || defaultAirport;
       const dest = route?.dest || defaultAirport;
 
@@ -318,7 +330,10 @@ async function fetchFlights() {
             <div class="featured-header-bar">
               <div class="featured-badge">⚡ CLOSEST IN RANGE</div>
               <div class="callsign-box">
-                <span class="callsign">${f.callsign}</span>
+                <div>
+                  <span class="callsign">${f.callsign}</span>
+                  ${airlineName ? `<div class="airline-name">${airlineName}</div>` : ''}
+                </div>
                 ${logoUrl ? `<img src="${logoUrl}" class="airline-logo" alt="Airline logo" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
               </div>
             </div>
