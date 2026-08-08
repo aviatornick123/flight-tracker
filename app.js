@@ -41,7 +41,7 @@ function getDistanceInMiles(lat1, lon1, lat2, lon2) {
   return (R * c).toFixed(1);
 }
 
-// Dynamically extracts full route, city, and airport name from global aviation database
+// Dynamically extracts airline name, airport name, city, and country from aviation database
 async function getRoute(callsign) {
   if (!callsign || callsign === "PRIVATE") return null;
   try {
@@ -51,17 +51,20 @@ async function getRoute(callsign) {
       const flightRoute = data?.response?.flightroute;
       if (flightRoute?.origin && flightRoute?.destination) {
         return {
+          airline: flightRoute.airline?.name || "",
           origin: {
             code: flightRoute.origin.iata_code || flightRoute.origin.icao_code || "N/A",
             name: flightRoute.origin.name || "Unknown Airport",
-            city: flightRoute.origin.municipality || flightRoute.origin.country_name || "Unknown City",
+            city: flightRoute.origin.municipality || "Unknown City",
+            country: flightRoute.origin.country_name || flightRoute.origin.country_iso_name || "",
             lat: flightRoute.origin.latitude || null,
             lon: flightRoute.origin.longitude || null
           },
           dest: {
             code: flightRoute.destination.iata_code || flightRoute.destination.icao_code || "N/A",
             name: flightRoute.destination.name || "Unknown Airport",
-            city: flightRoute.destination.municipality || flightRoute.destination.country_name || "Unknown City",
+            city: flightRoute.destination.municipality || "Unknown City",
+            country: flightRoute.destination.country_name || flightRoute.destination.country_iso_name || "",
             lat: flightRoute.destination.latitude || null,
             lon: flightRoute.destination.longitude || null
           }
@@ -248,12 +251,13 @@ async function fetchFlights() {
 
     updateMapVisuals(flights);
 
-    const defaultAirport = { code: "N/A", name: "Route Info N/A", city: "Unknown City", lat: null, lon: null };
+    const defaultAirport = { code: "N/A", name: "Route Info N/A", city: "Unknown City", country: "", lat: null, lon: null };
 
     const cardsHtml = await Promise.all(flights.map(async (f, idx) => {
       const isClosest = idx === 0;
       const route = await getRoute(f.callsign);
 
+      const airlineName = route?.airline || "";
       const orig = route?.origin || defaultAirport;
       const dest = route?.dest || defaultAirport;
 
@@ -270,8 +274,9 @@ async function fetchFlights() {
             <div class="card-header">
               <div class="callsign-box">
                 <span class="callsign">${f.callsign}</span>
-                ${logoUrl ? `<img src="${logoUrl}" class="airline-logo" alt="Airline" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
+                ${logoUrl ? `<img src="${logoUrl}" class="airline-logo" alt="Airline logo" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
               </div>
+              ${airlineName ? `<div class="airline-name">${airlineName}</div>` : ''}
               <div class="ac-type">${f.type} ${f.reg ? `(${f.reg})` : ''}</div>
             </div>
 
@@ -282,13 +287,13 @@ async function fetchFlights() {
                   <div class="airport-node">
                     <div class="airport-code">${orig.code}</div>
                     <div class="airport-name">${orig.name}</div>
-                    <div class="airport-city">${orig.city}</div>
+                    <div class="airport-city">${orig.city}${orig.country ? `, ${orig.country}` : ''}</div>
                   </div>
                   <div class="route-arrow">✈️</div>
                   <div class="airport-node" style="text-align: right;">
                     <div class="airport-code">${dest.code}</div>
                     <div class="airport-name">${dest.name}</div>
-                    <div class="airport-city">${dest.city}</div>
+                    <div class="airport-city">${dest.city}${dest.country ? `, ${dest.country}` : ''}</div>
                   </div>
                 </div>
               </div>
@@ -320,8 +325,9 @@ async function fetchFlights() {
             <div class="card-header">
               <div class="callsign-box">
                 <span class="callsign">${f.callsign}</span>
-                ${logoUrl ? `<img src="${logoUrl}" class="airline-logo" alt="Airline" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
+                ${logoUrl ? `<img src="${logoUrl}" class="airline-logo" alt="Airline logo" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
               </div>
+              ${airlineName ? `<div class="airline-name">${airlineName}</div>` : ''}
               <div class="ac-type">${f.type} ${f.reg ? `(${f.reg})` : ''}</div>
             </div>
 
@@ -330,13 +336,13 @@ async function fetchFlights() {
                 <div class="airport-node">
                   <div class="airport-code">${orig.code}</div>
                   <div class="airport-name">${orig.name}</div>
-                  <div class="airport-city">${orig.city}</div>
+                  <div class="airport-city">${orig.city}${orig.country ? `, ${orig.country}` : ''}</div>
                 </div>
                 <div class="route-arrow">✈️</div>
                 <div class="airport-node" style="text-align: right;">
                   <div class="airport-code">${dest.code}</div>
                   <div class="airport-name">${dest.name}</div>
-                  <div class="airport-city">${dest.city}</div>
+                  <div class="airport-city">${dest.city}${dest.country ? `, ${dest.country}` : ''}</div>
                 </div>
               </div>
             </div>
