@@ -48,6 +48,12 @@ function getHeadingDirection(track) {
   return `${Math.round(track)}° ${dirs[index]}`;
 }
 
+function getAltitudeColor(altFeet) {
+  if (altFeet < 5000) return "#f59e0b";  // Gold (Low Altitude / Approach)
+  if (altFeet < 18000) return "#38bdf8"; // Sky Blue (Mid Altitude)
+  return "#c084fc";                      // Purple (High Altitude / Cruise)
+}
+
 function getLogoUrl(callsign) {
   if (!callsign) return "";
   const trimmed = callsign.trim();
@@ -56,11 +62,12 @@ function getLogoUrl(callsign) {
   return `https://pics.avs.io/200/80/${iata}.png`;
 }
 
-function createRotatedPlaneIcon(heading) {
+function createRotatedPlaneIcon(heading, altFeet) {
   const angle = heading || 0;
+  const color = getAltitudeColor(altFeet || 0);
   const svg = `
     <div style="transform: rotate(${angle}deg); width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.8));">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="#38bdf8" stroke="#0f172a" stroke-width="1.5">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="${color}" stroke="#0f172a" stroke-width="1.5">
         <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
       </svg>
     </div>`;
@@ -87,7 +94,6 @@ async function getAircraftPhoto(registration) {
   return null;
 }
 
-// Dual Route Lookup: Tries CallSign API first, falls back to Mode-S Hex DB
 async function getRoute(callsign, hex) {
   if (!callsign || callsign === "PRIVATE") return "Route N/A";
   const clean = callsign.trim();
@@ -173,7 +179,7 @@ async function fetchFlights() {
         const track = ac.track || 0;
         const altFeet = typeof ac.alt_baro === "number" ? ac.alt_baro : (ac.alt_geom || 0);
         const speedKnots = Math.round(ac.gs || 0);
-        const vertRate = ac.baro_rate || ac.geom_rate || 0; // Vertical climb/descent rate
+        const vertRate = ac.baro_rate || ac.geom_rate || 0;
         const heading = getHeadingDirection(track);
         const distance = (lat && lon) ? parseFloat(getDistanceInMiles(HOME_LAT, HOME_LON, lat, lon)) : 999;
 
@@ -186,29 +192,31 @@ async function fetchFlights() {
     sortedFlights.forEach(f => {
       if (f.lat && f.lon) {
         activeCallsigns.add(f.callsign);
+        const altColor = getAltitudeColor(f.altFeet);
 
-        // 1. Marker with Rotated Icon
+        // 1. Marker with Rotated & Color-coded Icon
         if (aircraftMarkers[f.callsign]) {
           aircraftMarkers[f.callsign].setLatLng([f.lat, f.lon]);
-          aircraftMarkers[f.callsign].setIcon(createRotatedPlaneIcon(f.track));
+          aircraftMarkers[f.callsign].setIcon(createRotatedPlaneIcon(f.track, f.altFeet));
         } else {
           aircraftMarkers[f.callsign] = L.marker([f.lat, f.lon], {
-            icon: createRotatedPlaneIcon(f.track)
+            icon: createRotatedPlaneIcon(f.track, f.altFeet)
           }).addTo(map).bindPopup(`<b>${f.callsign}</b><br>${f.fullType}<br>Alt: ${f.altFeet} ft`);
         }
 
-        // 2. Flight Trail Polyline
+        // 2. Flight Trail Polyline (Matching Altitude Color)
         if (!flightTrails[f.callsign]) {
           flightTrails[f.callsign] = [];
         }
         flightTrails[f.callsign].push([f.lat, f.lon]);
-        if (flightTrails[f.callsign].length > 20) flightTrails[f.callsign].shift(); // Keep last 20 coordinates
+        if (flightTrails[f.callsign].length > 20) flightTrails[f.callsign].shift();
 
         if (trailPolylines[f.callsign]) {
           trailPolylines[f.callsign].setLatLngs(flightTrails[f.callsign]);
+          trailPolylines[f.callsign].setStyle({ color: altColor });
         } else {
           trailPolylines[f.callsign] = L.polyline(flightTrails[f.callsign], {
-            color: '#38bdf8',
+            color: altColor,
             weight: 2.5,
             opacity: 0.8,
             dashArray: '5, 5'
@@ -217,7 +225,7 @@ async function fetchFlights() {
       }
     });
 
-    // Clean up stale markers/trails for aircraft that moved out of range
+    // Clean up stale markers/trails for aircraft out of range
     Object.keys(aircraftMarkers).forEach(cs => {
       if (!activeCallsigns.has(cs)) {
         map.removeLayer(aircraftMarkers[cs]);
@@ -239,7 +247,6 @@ async function fetchFlights() {
 
       const logoUrl = getLogoUrl(f.callsign);
       
-      // Altitude trend arrow
       let altTrend = "";
       if (f.vertRate > 250) altTrend = " ⬆️";
       else if (f.vertRate < -250) altTrend = " ⬇️";
